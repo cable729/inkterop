@@ -88,3 +88,51 @@ pikepdf and set `/BM /Darken` on the highlighter ExtGState.
 - `cPages.pages[]` entries with a `deleted` key are deleted pages — skip.
 - Text blocks (typed text) exist in v6 (rmscene `root_text`); we use them
   only for stroke anchor positions so far, not rendered.
+
+## IR mapping (what the reader emits)
+
+Reader: `core/src/rminterop/formats/remarkable/reader.py`. One `ir.Stroke`
+per `si.Line`, coordinates with text-anchor offsets applied.
+
+Channels: `WIDTH` = `PenModel.width(p)` (i.e. `point.width/4`, floor 0.5u,
+faithful style), raw `PRESSURE` (`p.pressure/255`), `SPEED` (`p.speed`,
+device units), `TILT_AZIMUTH` (`p.direction * 2pi/255` rad); `ALPHA` only
+for pencils (pressure-derived opacity varies per point). Constant opacity
+lives in `appearance.opacity` instead.
+
+Tool families (`_FAMILY`): BALLPOINT_1/2->ballpoint, CALIGRAPHY->calligraphy,
+ERASER/ERASER_AREA->eraser, FINELINER_1/2->fineliner,
+HIGHLIGHTER_1/2->highlighter, MARKER_1/2->marker,
+MECHANICAL_PENCIL_1/2->mechanical_pencil, PAINTBRUSH_1/2->brush,
+PENCIL_1/2->pencil, SHADER->shader. `NativeTool` preserves the raw enum +
+color enum + `color_rgba` + `thickness_scale` for lossless round-trip.
+
+Appearance: fineliner/highlighter -> `STROKED_CONSTANT` (width = first
+point's); others `STROKED_VARIABLE`; highlighter/shader get
+`blend=DARKEN, cap=SQUARE, underlay=True` (opacity 0.85 / 0.45);
+`ERASER_AREA` opacity 0. `pen_style="rmc"` is a reader option: rmc width
+formulas fill WIDTH, and per-point ballpoint colors go to
+`extra["rminterop"]["point_rgb"]`.
+
+## Renderer quirks that goldens pin (do not "fix" casually)
+
+Port of the validated renderer lives in `core/src/rminterop/render/`
+(`primitives.py` + `pdf.py`); output verified op-identical on the whole
+library (110/110 docs, scripts/ab_check.py).
+
+- Variable-width strokes are split into constant-width polyline runs when
+  the per-point width drifts more than **0.35u** from the run's width;
+  adjacent runs share the split point; a run only closes once it has >=2
+  points.
+- **Color/alpha are sampled at run starts only**, not per point (a pencil
+  stroke's opacity steps at width splits — matches the validated output).
+- Single-point runs render as filled circles, r = width/2 (zero-length
+  round-cap segments draw nothing in PDF).
+- Highlighter/shader (underlay) strokes draw BENEATH ink at partial
+  opacity — an approximation of the official export's `/BM /Darken`
+  ExtGState (exact-blend pikepdf pass is an M2 item).
+- Strokes whose first-point alpha <= 0 (ERASER_AREA) are skipped entirely
+  and excluded from page-bounds computation.
+- Page CTM folds `point_scale` in (`transform(s*scale, 0, 0, -s*scale, ...)`)
+  so widths are set in canvas units; blank pages are emitted at target
+  size even when `normalize="native"`.
