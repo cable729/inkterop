@@ -24,4 +24,16 @@ format — everything here builds on reading that cache (read-only, zero cloud r
 
 ## Status
 
-Early development. See `docs/` and per-directory READMEs.
+Phase 1 (mirror pipeline) is live: the launchd daemon renders every notebook
+into `iCloud Drive/reMarkable/` within seconds of the desktop app syncing,
+with device-faithful pens, bright highlighters, page templates, and uniform
+Letter-size pages. Next: on-device XOVI landscape mod (kit ready in
+`device-mods/`), then the menu-bar app and the import lane.
+
+Start here:
+- [docs/ROADMAP.md](docs/ROADMAP.md) — phases, status, known gaps
+- [docs/format-notes.md](docs/format-notes.md) — reverse-engineered v6/export
+  facts (read before touching the renderer)
+- [docs/research.md](docs/research.md) — ecosystem survey (tools, modding,
+  iPad interop reality)
+- [CLAUDE.md](CLAUDE.md) — agent quick-start: commands, gotchas, external state

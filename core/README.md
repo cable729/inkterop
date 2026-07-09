@@ -23,7 +23,10 @@ Notes:
   Paper Pro canvas; "adjustable page height" grows y. Uniform mode fits each
   page onto a fixed page size (default Letter), which fixes the variable page
   heights of landscape exports.
-- Pen calibration adapted from rmc (MIT); "faithful" style keeps ballpoint
-  ink solid like the device instead of pressure-faded gray.
+- Pens: "faithful" style draws each stroke at the device-computed per-point
+  width stored in the file (see ../docs/format-notes.md); highlighters use
+  their stored RGB at full brightness beneath the ink; page templates
+  (dots/lines/grid) are drawn across the full grown page. "rmc" style keeps
+  the legacy community formulas for comparison.
 - Annotated PDF/EPUB base-page merge is not implemented yet (handwriting-only
   render); notebooks are the default scope.
