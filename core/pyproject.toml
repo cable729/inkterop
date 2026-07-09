@@ -8,13 +8,17 @@ dependencies = [
     "pikepdf>=9.0",
     "reportlab>=4.0",
     "watchdog>=4.0",
+    "supernotelib>=0.7.1",
 ]
 
 [project.scripts]
 rminterop = "rminterop.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "hypothesis>=6.156.4",
+    "pytest>=8.0",
+]
 
 [build-system]
 requires = ["hatchling"]
