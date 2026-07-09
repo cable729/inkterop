@@ -1,10 +1,9 @@
 # reMarkable v6 / Paper Pro format notes (reverse-engineered)
 
-Everything here was verified empirically on 2026-07-08 against Caleb's
-validation notebook (landscape, Paper Pro, firmware-era 3.2x) and
-its OFFICIAL export (`the official export PDF` at the time; pages
-685pt wide, heights 514–925pt). Where this contradicts rmc/community docs,
-trust this file — the community model is rM2-era.
+Everything here was verified empirically on 2026-07-08 against a real
+Paper Pro notebook (landscape, firmware-era 3.2x) and its OFFICIAL desktop
+export (pages 685pt wide, heights 514–925pt). Where this contradicts
+rmc/community docs, trust this file — the community model is rM2-era.
 
 ## Library cache layout (desktop app)
 
@@ -73,8 +72,8 @@ pikepdf and set `/BM /Darken` on the highlighter ExtGState.
 ## Templates
 
 - Per page: `.content` `cPages.pages[].template.value`. Observed "Blank",
-  "P Dots S". The official desktop export DROPS templates entirely (Caleb
-  wants them, so we draw them).
+  "P Dots S". The official desktop export DROPS templates entirely (we
+  want them, so we draw them).
 - Real template art lives on-device at `/usr/share/remarkable/templates/`
   (SVGs) — grab during a rooted session. Until then our dot pitch
   (39 units) and line spacing are visual approximations.

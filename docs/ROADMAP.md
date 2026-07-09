@@ -1,12 +1,11 @@
 # Roadmap
 
-Full original plan: local planning notes
-(approved 2026-07-08). Caleb's goals: (1) iPad interop without leaving
+Original goals (plan approved 2026-07-08): (1) iPad interop without leaving
 reMarkable land, (2) fixed standard page size in landscape, (3) pen strokes
 that export the way they look on-device, (4) hands-off ~1-2 min sync,
 (5) notes readable in a normal PDF app, auto-updating.
 
-## Phase 0 — XOVI landscape experiment on-device  ⏳ WAITING ON CALEB
+## Phase 0 — XOVI landscape experiment on-device  ⏳ WAITING ON DEVICE
 **Time-critical**: the Paper Pro ships for warranty repair (ghosting) around
 2026-07-12. Kit is ready in `device-mods/` — follow its README checklist:
 root (dev mode wipes; cloud restores) → remagic installs XOVI → install
@@ -23,7 +22,7 @@ diagnostic). If a replacement unit returns, re-run `install.sh`.
 Library reader, faithful renderer (see `docs/formats/remarkable.md`),
 incremental mirror to iCloud Drive (34 notebooks: 68s full, <1s
 incremental), TOML config, CLI, launchd watch daemon (installed and
-running). Caleb confirmed output "looks really correct".
+running). The maintainer confirmed output "looks really correct".
 
 Known gaps / follow-ups:
 - Pencil / mechanical pencil / paintbrush / shader alphas are best-guess —

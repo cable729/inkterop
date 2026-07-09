@@ -96,7 +96,7 @@ failure recorded here, not silently left `True`.
 
 | Writer | Target app | Fixtures | Open check | Round-trip | Reviewer | Date |
 |---|---|---|---|---|---|---|
-| xopp | Xournal++ 1.3.5 (Mac) | GoodNotes mixed-pens fixture; reMarkable "Getting started" p1-3 (307 strokes, incl. dots); Saber pens+text fixture | PASS — all three opened without errors; colors/widths/highlighter translucency correct. First attempt FAILED on reMarkable ("Wrong count of points (2)"): Xournal++ rejects single-point strokes; writer now emits dots as 0.001pt micro-segments (`test_single_point_stroke_becomes_valid_segment`). | PASS (`core/tests/test_xopp.py`) | Caleb (visual) + Claude (structural) | 2026-07-09 |
+| xopp | Xournal++ 1.3.5 (Mac) | GoodNotes mixed-pens fixture; reMarkable "Getting started" p1-3 (307 strokes, incl. dots); Saber pens+text fixture | PASS — all three opened without errors; colors/widths/highlighter translucency correct. First attempt FAILED on reMarkable ("Wrong count of points (2)"): Xournal++ rejects single-point strokes; writer now emits dots as 0.001pt micro-segments (`test_single_point_stroke_becomes_valid_segment`). | PASS (`core/tests/test_xopp.py`) | maintainer (visual) + Claude (structural) | 2026-07-09 |
 
 ## Current status
 

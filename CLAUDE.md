@@ -2,7 +2,7 @@
 
 Monorepo: a universal converter between e-ink/note-app formats (reMarkable,
 GoodNotes, Notability, Supernote, Xournal++, …) and display formats
-(PDF/SVG/InkML), grown out of Caleb's reMarkable Paper Pro mirror. Read
+(PDF/SVG/InkML), grown out of the maintainer's reMarkable Paper Pro mirror. Read
 `docs/ROADMAP.md` for status, `docs/ir.md` before touching the IR,
 `docs/formats/<name>.md` before touching a format, `docs/research.md` for
 the ecosystem survey.

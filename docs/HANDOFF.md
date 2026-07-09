@@ -11,8 +11,8 @@ For anyone (human or agent) picking this repo up. Complements
   modern), saber, supernote (raster), xopp, inkml, irjson. Writers: pdf,
   svg, inkml, xopp (app-validated), irjson. 80 tests green
   (`cd core && uv run pytest -q`).
-- **The original mirror** (`mirror`/`watch` + launchd daemon) is Caleb's
-  daily driver and untouched behaviorally: golden tests + a whole-library
+- **The original mirror** (`mirror`/`watch` + launchd daemon) is the
+  maintainer's daily driver and untouched behaviorally: golden tests + a whole-library
   A/B (110/110 docs op-identical) prove the IR refactor changed nothing.
 - **RE toolkit** `tools/re/` (pbwire, applelz4, inventory) — everything
   the format work was done with.
@@ -37,15 +37,15 @@ For anyone (human or agent) picking this repo up. Complements
 ## In flight
 
 - **Nebo BINK codec RE** — spawned as a background task (container
-  already mapped in `formats/nebo.md`; sample on Caleb's Desktop:
-  `sample.nebo` + app's own PDF/SVG as ground truth).
+  already mapped in `formats/nebo.md`; a self-made `.nebo` sample + the
+  app's own PDF/SVG exports serve as ground truth).
 - **.ntb reader** landed from a parallel session (FlatBuffers noteBundle:
   f16 delta-coded segments, width profiles — `formats/notability/ntb.py`,
   fixture `core/tests/fixtures/notability/scribbles.ntb`).
 
 ## Open threads, in value order
 
-1. **iPad corpus (Caleb gets the iPad ~2026-07-10)**: corpus cases 16-18
+1. **iPad corpus (iPad arrives ~2026-07-10)**: corpus cases 16-18
    (`corpus-protocol.md`) — pressure ramp, tilt, Mac/iPad parity. These
    should crack: GoodNotes pressure-pen section-9 columns and pencil
    tilt columns (currently frozen at Apple Pencil defaults pi/6, pi/3),
@@ -86,9 +86,9 @@ For anyone (human or agent) picking this repo up. Complements
   samples: `corpus/third-party/` (gitignored, `MANIFEST.toml`
   provenance). Self-generated fixtures: `core/tests/fixtures/<format>/`
   (committed, CC0).
-- Caleb's comparison outputs: `~/Documents/inkterop-out/` (disposable).
-- App exports used today: `~/Documents` (GoodNotes .goodnotes trio,
-  Notability .ntb), `~/Downloads` (Saber .sba + PDF), `~/Desktop`
-  (Nebo trio, Notability PDF).
+- Comparison outputs: a disposable local `inkterop-out/` directory.
+- App exports used today live in the maintainer's home directory
+  (GoodNotes .goodnotes trio, Notability .ntb, Saber .sba + PDF,
+  Nebo trio, Notability PDF).
 - External state (config, status.json, launchd, mirror output): see
   `CLAUDE.md` § "State that lives outside the repo".

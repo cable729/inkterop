@@ -1,0 +1,22 @@
+inkterop — licensing notice
+
+Code in this repository is MIT-licensed (see LICENSE), with these
+exceptions:
+
+- device-mods/vendor/ is vendored unmodified from
+  https://github.com/rmitchellscott/xovi-qmd-extensions
+  (commit 9db5b1efd5cbf76311d25b23a2cfc8e4437f3ed8, recorded in
+  device-mods/vendor/UPSTREAM_COMMIT) and is licensed GPL-3.0
+  (see device-mods/vendor/LICENSE). It is a self-contained on-device
+  toolkit; nothing in the MIT-licensed Python package links against
+  or derives from it.
+
+- Documentation under docs/ is CC BY 4.0.
+
+- Self-made test fixtures under core/tests/fixtures/ are CC0
+  (public domain dedication).
+
+Format documentation in docs/formats/ was produced by independent
+reverse engineering from documented format facts and self-generated
+sample files; see docs/reverse-engineering.md for the methodology and
+the GPL-boundary policy.
