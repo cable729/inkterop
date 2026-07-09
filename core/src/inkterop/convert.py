@@ -23,6 +23,17 @@ def _forbidden_roots() -> list[Path]:
         roots.append(default_cache_dir())
     except Exception:
         pass
+    # Note apps' own containers (their internal stores sync to their
+    # clouds; a bad write propagates before anyone notices) and the
+    # mirror's iCloud output dir (owned by the mirror engine).
+    home = Path.home()
+    roots += [
+        home / "Library" / "Containers" / "com.goodnotesapp.x",
+        home / "Library" / "Containers" / "com.gingerlabs.Notability",
+        home / "Library" / "Containers" / "com.adilhanney.saber",
+        home / "Library" / "Mobile Documents" / "com~apple~CloudDocs"
+             / "reMarkable",
+    ]
     return roots
 
 

@@ -45,6 +45,19 @@ reimplement, so `exact` fidelity is approximate `[inferred]` while
 `raw`/`native` are faithful. `point_scale = 595/1000` (canvas → points)
 `[inferred]` from page proportions.
 
+## Writer (2026-07-09)
+
+`formats/saber/writer.py` emits `.sbn2`/`.sba` (zip with `main.sbn2`) as
+the exact inverse of the reader: observed v19 top-level constants
+(`v/ni/b/p/l/lt/z/c`) and per-stroke fields (`shape/p/i/ty/pe/c/s/sm/sp`)
+`[verified against the fixture]`; ARGB packed as signed int32 (Dart BSON).
+NativeTool round-trips `ty/s/sm/pe` verbatim; foreign strokes map families
+via `FAMILY_TOOL` and take size from appearance/WIDTH median. Texts are
+re-emitted as Quill `{"insert": ...}` runs (trailing `\n` appended per
+Quill's invariant). RAW fidelity accepted — pressure is the one raw
+channel Saber stores; speed/tilt drop. `validated=False` pending the
+Saber Mac app-open check (docs/validated-writes.md).
+
 ## Open questions
 
 1. Pressure→rendered-width curve (ask upstream or measure from PDF
@@ -56,3 +69,5 @@ reimplement, so `exact` fidelity is approximate `[inferred]` while
 ## Changelog
 
 - 2026-07-09: initial spec + reader from a controlled Mac export (v19).
+- 2026-07-09: writer (inverse mapping, BSON encoder), round-trip tested;
+  ships behind `--experimental`.

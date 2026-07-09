@@ -107,14 +107,17 @@ failure recorded here, not silently left `True`.
 | InkML | `formats/inkml.py: InkmlWriter` | `True` | Open W3C standard; round-trip covered by tests (`core/tests/test_inkml.py` — see `docs/formats/inkml-mapping.md`). |
 | xopp | `formats/xopp/writer.py: XoppWriter` | `True` | Open, documented Xournal++ format; round-trip covered by `core/tests/test_xopp.py`; **app-open check passed** (see checklist row below). |
 | IR-JSON (`.json`) | `formats/irjson.py: IrJsonWriter` | `True` | Our own format; round-trip covered by tests. |
+| Saber (`.sba`/`.sbn2`) | `formats/saber/writer.py: SaberWriter` | **`False`** | First native-app writer. Round-trip covered by `core/tests/test_saber.py` (synthetic + fixture); awaiting the Saber Mac app-open check. Saber is open source, so the risk profile is milder than closed apps, but the app's loader — not our reader — is still the authority. |
 
-**No native-app writers exist yet** (reMarkable `.rm`/`.rmdoc`,
-GoodNotes `.goodnotes`, Notability `.note`) — every current writer is
-either an open/universal format or our own. When they land
-(`docs/ROADMAP.md` M2: reMarkable via `rmscene` `write_blocks`/drawj2d,
-Notability writer per the svg2notability precedent), each starts
-`validated = False`, ships behind `--experimental`, and only flips once a
-checklist row above documents a real app-open check on real app hardware.
+The remaining native writers (reMarkable `.rm`/`.rmdoc`, Supernote
+`.note`, GoodNotes `.goodnotes`, Notability `.ntb`) are in flight on the
+note-apps workstream; each starts `validated = False`, ships behind
+`--experimental`, and only flips once a checklist row above documents a
+real app-open check on the real app.
+
+The deny-list now also covers the GoodNotes / Notability / Saber macOS
+app containers and the iCloud mirror output directory
+(`convert.py:_forbidden_roots()`).
 
 ## Changelog
 
