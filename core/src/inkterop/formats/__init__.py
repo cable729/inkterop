@@ -20,6 +20,7 @@ def _load() -> None:
     _LOADED = True
     from ..render.pdf import PdfWriter
     from ..render.svg import SvgWriter
+    from .excalidraw import ExcalidrawReader, ExcalidrawWriter
     from .goodnotes import GoodnotesReader
     from .inkml import InkmlReader, InkmlWriter
     from .irjson import IrJsonReader, IrJsonWriter
@@ -33,11 +34,11 @@ def _load() -> None:
     _READERS.extend([
         RemarkableReader(), IrJsonReader(), XoppReader(), InkmlReader(),
         GoodnotesReader(), SupernoteReader(), NotabilityReader(),
-        NtbReader(), SaberReader(), NeboReader(),
+        NtbReader(), SaberReader(), NeboReader(), ExcalidrawReader(),
     ])
     _WRITERS.extend([
         PdfWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(), SvgWriter(),
-        SaberWriter(),
+        SaberWriter(), ExcalidrawWriter(),
     ])
 
 
