@@ -27,8 +27,12 @@ Registry: 19 readers / 12 writers.
 
 Written samples staged in the local `corpus/validate/` (gitignored):
 per-format round-trips plus reMarkable→X foreign conversions for Saber
-Mac, excalidraw.com, reMarkable desktop (File → Import ONLY — never the
-cache), GoodNotes Mac, Notability Mac, Supernote (device, later).
+Mac, reMarkable desktop (File → Import ONLY — never the cache),
+GoodNotes Mac, Notability Mac, Supernote (device, later).
+**Excalidraw: DONE 2026-07-09** — validated in-browser against the
+official 0.18.0 package; the check caught and fixed an ~8× width bug
+(freedraw rendering law, `docs/formats/excalidraw.md`) and flipped the
+writer to `validated=True`.
 Record results as checklist rows in `docs/validated-writes.md`; iterate
 on failures — GoodNotes (member-set tolerance, raw `bv4-` frames) and
 Notability (op-envelope unknowns) are the likely iteration targets.

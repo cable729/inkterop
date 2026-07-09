@@ -7,16 +7,25 @@ sample). Container: plain JSON `{"type": "excalidraw", "version": 2,
 
 Ink is `freedraw` elements: `x`/`y` element origin, `points` relative
 [[dx, dy], ...], optional `pressures` [0-1] (absent/empty when
-`simulatePressure` is true), `strokeColor` hex, `strokeWidth` px,
+`simulatePressure` is true), `strokeColor` hex, `strokeWidth`,
 `opacity` 0-100, `angle` radians (rotation about the element center).
 `line`/`arrow` carry `points` too; `rectangle`/`ellipse`/`diamond` are
 implicit shapes we flatten to outline polylines. `text` elements carry
 `text`/`fontSize`. Canvas is infinite, y-down, CSS px
 (`point_scale = 0.75`).
 
+`strokeWidth` is NOT the rendered thickness of freedraw ink: the app
+draws it via perfect-freehand, and the on-canvas thickness follows the
+measured law in `_thickness_factor` ([verified] against
+@excalidraw/excalidraw 0.18 `exportToSvg`, see
+`docs/formats/excalidraw.md`). Only line/arrow/shape elements use
+`strokeWidth` as a plain 1:1 stroke width.
+
 Both directions accept RAW fidelity: pressure is the only raw channel
-the format stores. Writer ships validated=False pending an
-excalidraw.com open-check (docs/validated-writes.md).
+the format stores. At EXACT/NATIVE fidelity the writer re-encodes a
+varying WIDTH channel into synthetic `pressures` through the inverse
+rendering law, so the app reproduces per-point widths; RAW keeps the
+source pressure values instead.
 """
 from __future__ import annotations
 
@@ -34,6 +43,28 @@ FORMAT_ID = "excalidraw"
 PX_SCALE = 0.75  # CSS px -> pt
 
 _DEFAULT_STROKE = "#1e1e1e"
+
+# Freedraw rendering law, measured on @excalidraw/excalidraw 0.18
+# exportToSvg with constant-pressure probe strokes (fits the probes to
+# 3 significant digits; see docs/formats/excalidraw.md):
+#   thickness(p) = strokeWidth * 8.5 * sin(pi/2 * (0.5 + 0.6*(p - 0.5)))
+# i.e. 8.08x at p=1.0, 6.01x at p=0.5. simulatePressure strokes measured
+# ~6.9x on a uniform-speed probe (speed-dependent, approximate).
+_FREEDRAW_SIZE = 8.5
+_FREEDRAW_THINNING = 0.6
+_SIMULATED_FACTOR = 6.9
+
+
+def _thickness_factor(pressure: float) -> float:
+    """Rendered freedraw thickness per unit strokeWidth at a pressure."""
+    t = 0.5 + _FREEDRAW_THINNING * (pressure - 0.5)
+    return _FREEDRAW_SIZE * math.sin(math.pi / 2.0 * t)
+
+
+def _pressure_for_ratio(ratio: float) -> float:
+    """Inverse of _thickness_factor: ratio = thickness / strokeWidth."""
+    t = 2.0 / math.pi * math.asin(max(0.0, min(1.0, ratio / _FREEDRAW_SIZE)))
+    return max(0.0, min(1.0, 0.5 + (t - 0.5) / _FREEDRAW_THINNING))
 
 
 def _parse_color(hex_str: str | None) -> tuple[ir.Color, float]:
@@ -106,12 +137,24 @@ def _element_stroke(el: dict) -> ir.Stroke | None:
 
     color, _ = _parse_color(el.get("strokeColor"))
     opacity = float(el.get("opacity", 100)) / 100.0
-    width = float(el.get("strokeWidth", 2.0))
+    stroke_width = float(el.get("strokeWidth", 2.0))
     family = ir.ToolFamily.PEN if kind == "freedraw" else ir.ToolFamily.UNKNOWN
 
-    channels: dict = {ir.Channel.WIDTH: [width] * len(xs)}
     pressures = el.get("pressures") or []
-    if kind == "freedraw" and len(pressures) == len(xs):
+    have_pressures = kind == "freedraw" and len(pressures) == len(xs) and pressures
+    if kind == "freedraw":
+        # decode strokeWidth through the measured rendering law
+        if have_pressures:
+            widths = [stroke_width * _thickness_factor(float(p))
+                      for p in pressures]
+        else:
+            widths = [stroke_width * _SIMULATED_FACTOR] * len(xs)
+    else:
+        widths = [stroke_width] * len(xs)  # shapes stroke 1:1
+    variable = max(widths) - min(widths) > 1e-9
+
+    channels: dict = {ir.Channel.WIDTH: widths}
+    if have_pressures:
         channels[ir.Channel.PRESSURE] = [float(p) for p in pressures]
 
     return ir.Stroke(
@@ -119,15 +162,17 @@ def _element_stroke(el: dict) -> ir.Stroke | None:
         tool=ir.ToolRef(
             family=family,
             native=ir.NativeTool(FORMAT_ID, kind, {
-                "strokeWidth": width,
+                "strokeWidth": stroke_width,
                 "simulatePressure": bool(el.get("simulatePressure")),
             }),
         ),
         color=color,
         channels=channels,
         appearance=ir.StrokeAppearance(
-            mode=ir.GeometryMode.STROKED_CONSTANT,
-            width=width, color=color, opacity=opacity,
+            mode=(ir.GeometryMode.STROKED_VARIABLE if variable
+                  else ir.GeometryMode.STROKED_CONSTANT),
+            width=None if variable else widths[0],
+            color=color, opacity=opacity,
             cap=ir.LineCap.ROUND,
         ),
     )
@@ -184,14 +229,47 @@ def document_to_scene(doc: ir.Document,
                 seq += 1
                 xs = [(x - bx) * k for x in s.x]
                 ys = [(y - by) * k for y in s.y]
+                widths = s.channels.get(ir.Channel.WIDTH)
                 if s.appearance is not None and s.appearance.width is not None:
-                    width = s.appearance.width * k
+                    target = s.appearance.width * k
+                elif widths:
+                    target = median(widths) * k
                 else:
-                    widths = s.channels.get(ir.Channel.WIDTH)
-                    width = (median(widths) * k) if widths else 2.0
+                    target = None
                 color = s.appearance.color if s.appearance else s.color
-                opacity = s.appearance.opacity if s.appearance else 1.0
+                alphas = s.channels.get(ir.Channel.ALPHA)
+                if alphas:
+                    opacity = median(alphas)
+                else:
+                    opacity = s.appearance.opacity if s.appearance else 1.0
                 pressures = s.channels.get(ir.Channel.PRESSURE)
+
+                # Choose strokeWidth/pressures so the app's rendering law
+                # reproduces the source thickness (see _thickness_factor).
+                # Width-encoding wins over raw pressure at EXACT/NATIVE:
+                # a constant-width pen with varying pressure must not
+                # taper in-app. (excalidraw->excalidraw round-trips still
+                # preserve pressures exactly: the reader derived WIDTH
+                # from them, so the inversion returns the same values.)
+                if (fidelity is not Fidelity.RAW and widths
+                        and len(widths) == len(s.x)):
+                    # per-point width -> synthetic pressures; the widest
+                    # point renders at full pressure
+                    stroke_width = (max(widths) * k) / _thickness_factor(1.0)
+                    out_pressures = [
+                        _pressure_for_ratio(w * k / stroke_width)
+                        for w in widths]
+                elif pressures and len(pressures) == len(s.x):
+                    ref = median(pressures)
+                    stroke_width = ((target if target is not None else 2.0)
+                                    / _thickness_factor(ref))
+                    out_pressures = [float(p) for p in pressures]
+                elif target is not None:
+                    stroke_width = target / _SIMULATED_FACTOR
+                    out_pressures = []
+                else:
+                    stroke_width = 1.0  # app default "thin"
+                    out_pressures = []
                 elements.append({
                     "id": f"ink-{seq:04d}",
                     "type": "freedraw",
@@ -201,7 +279,7 @@ def document_to_scene(doc: ir.Document,
                     "strokeColor": _hex(color),
                     "backgroundColor": "transparent",
                     "fillStyle": "solid",
-                    "strokeWidth": width,
+                    "strokeWidth": stroke_width,
                     "strokeStyle": "solid",
                     "roughness": 0,
                     "opacity": round(opacity * 100),
@@ -211,9 +289,8 @@ def document_to_scene(doc: ir.Document,
                     "updated": 0, "link": None, "locked": False,
                     "points": [[x - xs[0], y - ys[0]]
                                for x, y in zip(xs, ys)],
-                    "pressures": ([float(p) for p in pressures]
-                                  if pressures else []),
-                    "simulatePressure": not pressures,
+                    "pressures": out_pressures,
+                    "simulatePressure": not out_pressures,
                     "lastCommittedPoint": None,
                 })
             for t in layer.texts:
@@ -269,7 +346,10 @@ class ExcalidrawReader:
 class ExcalidrawWriter:
     format_id = FORMAT_ID
     extensions = (".excalidraw",)
-    validated = False  # pending excalidraw.com open-check
+    # open-checked via @excalidraw/excalidraw 0.18.0 loadFromBlob (the
+    # app's file-open path) + exportToSvg visual match, 2026-07-09
+    # (docs/validated-writes.md)
+    validated = True
 
     def write(self, doc: ir.Document, path: Path, fidelity: Fidelity,
               options: dict[str, Any] | None = None) -> None:

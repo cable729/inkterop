@@ -97,6 +97,7 @@ failure recorded here, not silently left `True`.
 | Writer | Target app | Fixtures | Open check | Round-trip | Reviewer | Date |
 |---|---|---|---|---|---|---|
 | xopp | Xournal++ 1.3.5 (Mac) | GoodNotes mixed-pens fixture; reMarkable "Getting started" p1-3 (307 strokes, incl. dots); Saber pens+text fixture | PASS — all three opened without errors; colors/widths/highlighter translucency correct. First attempt FAILED on reMarkable ("Wrong count of points (2)"): Xournal++ rejects single-point strokes; writer now emits dots as 0.001pt micro-segments (`test_single_point_stroke_becomes_valid_segment`). | PASS (`core/tests/test_xopp.py`) | maintainer (visual) + Claude (structural) | 2026-07-09 |
+| excalidraw | `@excalidraw/excalidraw` 0.18.0 (official npm package — the engine excalidraw.com is built on), `loadFromBlob` file-open path + `exportToSvg` | scribble.excalidraw round-trip; `fineliner-pencil-colors.rm` → .excalidraw | PASS — both load with zero dropped elements; `restore()` rewrote only bookkeeping fields (version/versionNonce/updated/boundElements). First attempt rendered ~8× fat: `strokeWidth` is not the on-canvas thickness (perfect-freehand law, measured — `docs/formats/excalidraw.md`); writer now encodes widths through the inverse law. Visual match vs the golden-validated renderer confirmed; known residual: per-point pencil ALPHA flattens to median element opacity. | PASS (`core/tests/test_excalidraw.py`, incl. `test_width_law_round_trip`) | Claude (browser session, package oracle) | 2026-07-09 |
 
 ## Current status
 
@@ -112,6 +113,7 @@ failure recorded here, not silently left `True`.
 | Supernote (`.note`) | `formats/supernote/writer.py: SupernoteWriter` | **`False`** | Raster-only writer; write->read crosses an independent parser (supernotelib) with pixel-bbox asserts (`core/tests/test_supernote_writer.py`). Awaiting a real device / Partner-app open check. |
 | GoodNotes (`.goodnotes`) | `formats/goodnotes/writer.py: GoodnotesWriter` | **`False`** | Encoder inverses property-tested; synthetic + Mac-export fixture write->read round-trips (`core/tests/test_goodnotes_writer.py`). Awaiting the GoodNotes Mac app-import check — closed app, loader strictness unknown (minimal member set, raw `bv4-` LZ4 frames). |
 | Notability (`.ntb`) | `formats/notability/writer.py: NtbWriter` | **`False`** | Synthetic + fixture write->read round-trips and schema-less fbwalk framing checks (`core/tests/test_ntb_writer.py`). Gated on TWO items: the color byte order (R vs G, format-doc open question — written as our reader interprets it, so a swap would show in-app, not in round-trips) and the Notability Mac app-open check. Fallback if .ntb import fails: a legacy `Session.plist` writer (svg2notability precedent). |
+| Excalidraw (`.excalidraw`) | `formats/excalidraw.py: ExcalidrawWriter` | `True` | Open MIT format; **app-open check passed** against the official `@excalidraw/excalidraw` 0.18.0 package (see checklist row above) after fixing the freedraw width law. |
 
 All five planned native writers now exist in code; each stays
 `validated = False` behind `--experimental` until its checklist row

@@ -104,8 +104,42 @@ def test_fixture_to_pdf(tmp_path):
     assert out.read_bytes()[:5] == b"%PDF-"
 
 
-def test_writer_experimental_gate(tmp_path):
-    from inkterop.convert import ConvertError, convert
+def test_writer_validated_no_gate(tmp_path):
+    """Writer is validated (docs/validated-writes.md row 2026-07-09):
+    conversion must work without --experimental."""
+    from inkterop.convert import convert
 
-    with pytest.raises(ConvertError, match="experimental"):
-        convert(FIXTURE, tmp_path / "gated.excalidraw")
+    out = tmp_path / "ungated.excalidraw"
+    convert(FIXTURE, out)
+    assert json.loads(out.read_text())["type"] == "excalidraw"
+
+
+def test_width_law_round_trip(tmp_path):
+    """strokeWidth encodes through the measured freedraw rendering law:
+    a written file re-read yields the same rendered widths."""
+    from statistics import median
+
+    rm = Path(__file__).parent / "fixtures" / "remarkable" / \
+        "fineliner-pencil-colors.rm"
+    from inkterop.formats.remarkable.reader import RemarkableReader
+
+    src = RemarkableReader().read(rm)
+    out = tmp_path / "law.excalidraw"
+    ExcalidrawWriter().write(src, out, Fidelity.EXACT)
+
+    back = ExcalidrawReader().read(out)
+    ss = list(src.pages[0].strokes())
+    bs = list(back.pages[0].strokes())
+    assert len(bs) == len(ss)
+    from inkterop.formats._scale import unit_factor
+    from inkterop.formats.excalidraw import PX_SCALE
+
+    k = unit_factor(src.pages[0], PX_SCALE)  # source units -> written px
+    for a, b in zip(ss, bs):
+        wa = a.channels.get(ir.Channel.WIDTH)
+        wb = b.channels.get(ir.Channel.WIDTH)
+        if not wa or not wb:
+            continue
+        # the widest point maps through p=1.0 exactly; narrower points
+        # may clamp at the law's floor, so compare the maximum
+        assert max(wb) == pytest.approx(max(wa) * k, rel=0.02)
