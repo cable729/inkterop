@@ -132,6 +132,12 @@ def _stroke(s: dict) -> ir.Stroke | None:
             native=ir.NativeTool(FORMAT_ID, tool_name, {
                 "size": size, "smoothing": s.get("sm"),
                 "pressure_enabled": pressure_enabled,
+                # every scalar stroke key verbatim (insertion-ordered) so
+                # the writer can round-trip tool options it doesn't model
+                # (e.g. Pencil's sl/ts/te) — the app's loader may require
+                # them
+                "raw": {k: v for k, v in s.items()
+                        if k not in ("p", "i")},
             }),
         ),
         color=color,

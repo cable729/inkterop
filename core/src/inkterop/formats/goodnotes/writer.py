@@ -1,13 +1,21 @@
 """IR -> GoodNotes 6 (.goodnotes). Experimental; exact inverse of reader.py.
 
-Emits the minimal container our reader consumes: `schema.pb` (version
-marker), `index.notes.pb` (one delimited record per page: field 1 = page
-UUID, field 2 = "notes/<UUID>" path — the shape observed in the committed
-Mac-export fixture), one `notes/<UUID>` record stream per page, and a tiny
-white `thumbnail.jpg`. Members the app also writes (index.events.pb,
-index.search.pb, index.attachments.pb, document.info.pb, search/) are NOT
-emitted — whether GoodNotes itself tolerates their absence is [unknown]
-and part of the pending app-import validation.
+Emits the FULL member set the Mac app writes (a minimal
+schema/index/notes/thumbnail container was rejected by the first
+app-import check, 2026-07-09): `document.info.pb` (empty — 0 bytes in
+real exports), `index.search.pb` + `search/<uuid>` (minimal record, one
+shared uuid with attachments as observed), `index.notes.pb` + one
+`notes/<UUID>` record stream per page, `index.events.pb` (empty — the
+real event journal's schema is [unknown]; a fresh import plausibly
+regenerates it), `thumbnail.jpg`, `index.attachments.pb` +
+`attachments/<uuid>` (a blank one-page PDF — GoodNotes stores paper
+backgrounds as standalone PDF attachments; the notes blobs do not
+reference them), and `schema.pb`.
+
+The leading per-page metadata record's fields are largely [unknown]; the
+reader captures the raw bytes into `page.extra["goodnotes"]["meta_record"]`
+and the writer replays them verbatim on round-trips, synthesizing our
+minimal skeleton only for foreign documents.
 
 Every stroke is emitted with the pressure-pen tpl signature
 (`vA(v)A(u)A(u)...`, flat (x, y, width) float32 triplets), regardless of
@@ -174,6 +182,18 @@ def _thumbnail_jpeg() -> bytes:
     return buf.getvalue()
 
 
+def _blank_pdf(width_pt: float, height_pt: float) -> bytes:
+    """Blank one-page PDF, the shape GoodNotes stores paper backgrounds
+    in as `attachments/<uuid>`."""
+    from reportlab.pdfgen import canvas as pdfcanvas
+
+    buf = io.BytesIO()
+    c = pdfcanvas.Canvas(buf, pagesize=(width_pt, height_pt))
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
 def document_to_goodnotes(doc: ir.Document,
                           fidelity: Fidelity = Fidelity.EXACT) -> bytes:
     if fidelity is Fidelity.RAW:
@@ -185,9 +205,11 @@ def document_to_goodnotes(doc: ir.Document,
     for page in doc.pages:
         k = unit_factor(page, 1.0)  # GoodNotes units ARE PDF points
         b = page.bounds
-        page_uuid = (page.extra.get("goodnotes", {}).get("page_uuid")
-                     or str(uuid.uuid4()).upper())
-        records = [_meta_record(page_uuid)]
+        gn_extra = page.extra.get("goodnotes", {})
+        page_uuid = gn_extra.get("page_uuid") or str(uuid.uuid4()).upper()
+        meta_hex = gn_extra.get("meta_record")
+        records = [bytes.fromhex(meta_hex) if meta_hex
+                   else _meta_record(page_uuid)]
         records += [
             _stroke_record(s, k, b.x_min, b.y_min, fidelity)
             for layer in page.layers if layer.visible
@@ -195,19 +217,39 @@ def document_to_goodnotes(doc: ir.Document,
         ]
         pages.append((page_uuid, join_delimited(records)))
 
-    index = join_delimited([
-        write_len_delimited(1, page_uuid.encode("ascii"))
-        + write_len_delimited(2, f"notes/{page_uuid}".encode("ascii"))
-        for page_uuid, _ in pages
-    ])
+    def _index(entries: list[tuple[str, str, bool]]) -> bytes:
+        return join_delimited([
+            write_len_delimited(1, u.encode("ascii"))
+            + write_len_delimited(2, p.encode("ascii"))
+            + (write_varint_field(3, 1) if flag else b"")
+            for u, p, flag in entries
+        ])
+
+    att_uuid = str(uuid.uuid4()).upper()
+    first = doc.pages[0].bounds if doc.pages else None
+    page_w = first.width if first else 595.0
+    page_h = first.height if first else 842.0
 
     buf = io.BytesIO()
+    # member order mirrors the observed Mac export
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("schema.pb", write_varint_field(1, SCHEMA_VERSION))
-        zf.writestr("index.notes.pb", index)
+        zf.writestr("document.info.pb", b"")
+        zf.writestr("index.search.pb",
+                    _index([(att_uuid, f"search/{att_uuid}", True)]))
+        zf.writestr("index.notes.pb",
+                    _index([(u, f"notes/{u}", False) for u, _ in pages]))
+        # minimal search record as observed: {2: 1, 3: ""}
+        zf.writestr(f"search/{att_uuid}",
+                    join_delimited([write_varint_field(2, 1)
+                                    + write_len_delimited(3, b"")]))
         for page_uuid, data in pages:
             zf.writestr(f"notes/{page_uuid}", data)
+        zf.writestr("index.events.pb", b"")
         zf.writestr("thumbnail.jpg", _thumbnail_jpeg())
+        zf.writestr("index.attachments.pb",
+                    _index([(att_uuid, f"attachments/{att_uuid}", False)]))
+        zf.writestr(f"attachments/{att_uuid}", _blank_pdf(page_w, page_h))
+        zf.writestr("schema.pb", write_varint_field(1, SCHEMA_VERSION))
     return buf.getvalue()
 
 

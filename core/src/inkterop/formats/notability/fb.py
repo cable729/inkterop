@@ -42,6 +42,7 @@ class FbBuilder:
     def __init__(self) -> None:
         self._data = bytearray()
         self._max_align = 4  # the root uoffset itself
+        self._vtables: dict[bytes, int] = {}  # dedup cache (official builders dedup)
 
     # --- primitive: prepend bytes with an aligned start ------------------
 
@@ -81,7 +82,11 @@ class FbBuilder:
         observed files, not a schema)."""
         offs: dict[int, int] = {}
         ends: list[int] = []  # end-offset just past each field's bytes
-        for idx in sorted(slots, reverse=True):
+        # Ascending index order: field_0 is prepended first and therefore
+        # lands at the HIGHEST offset inside the table — the layout the
+        # official (Swift/C++) builders produce and the one observed in
+        # app-made noteBundles.
+        for idx in sorted(slots):
             item = slots[idx]
             kind = item[0]
             if kind == "ref":
@@ -105,7 +110,11 @@ class FbBuilder:
         vt = bytearray(struct.pack("<HH", 4 + 2 * nslots, tbytes))
         for i in range(nslots):
             vt += struct.pack("<H", tpos - offs[i] if i in offs else 0)
-        vpos = self._prepend(bytes(vt), 2)
+        vt_bytes = bytes(vt)
+        vpos = self._vtables.get(vt_bytes)
+        if vpos is None:
+            vpos = self._prepend(vt_bytes, 2)
+            self._vtables[vt_bytes] = vpos
         # soffset: vtable_abs = table_abs - soffset  =>  soffset = vpos - tpos
         struct.pack_into("<i", self._data, len(self._data) - tpos, vpos - tpos)
         return tpos

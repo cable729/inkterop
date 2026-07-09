@@ -227,29 +227,84 @@ class RmdocWriter:
               options: dict[str, Any] | None = None) -> None:
         doc_uuid = str(uuidlib.uuid4())
         page_uuids = [str(uuidlib.uuid4()) for _ in doc.pages]
+        now = str(int(time.time() * 1000))
+
+        author = uuidlib.uuid4()
+        rm_payloads: list[bytes] = []
+        for page in doc.pages:
+            buf = io.BytesIO()
+            write_blocks(buf, page_to_blocks(page, author=author))
+            rm_payloads.append(buf.getvalue())
+
+        # Member set and JSON structure replicate a real desktop-cache
+        # document field-for-field (observed 2026-07-09; the previous
+        # minimal {fileType, orientation, pageCount, cPages.pages
+        # [id,template]} container was rejected by desktop File > Import
+        # with "No such file or directory").
         metadata = {
-            "visibleName": doc.title or path.stem,
+            "createdTime": now,
+            "lastModified": now,
+            "lastOpened": now,
+            "lastOpenedPage": 0,
+            "new": False,
             "parent": "",
+            "pinned": False,
+            "source": "",
             "type": "DocumentType",
-            "lastModified": str(int(time.time() * 1000)),
+            "visibleName": doc.title or path.stem,
         }
+        orientation = doc.orientation or "portrait"
         content = {
-            "fileType": "notebook",
-            "orientation": doc.orientation or "portrait",
-            "pageCount": len(doc.pages),
             "cPages": {
+                "lastOpened": {"timestamp": "1:1", "value": page_uuids[0]},
+                "original": {"timestamp": "0:0", "value": -1},
                 "pages": [
-                    {"id": pu, "template": {"value": "Blank"}}
-                    for pu in page_uuids
+                    {
+                        "id": pu,
+                        "idx": {"timestamp": "2:2",
+                                "value": _fractional_index(i)},
+                        "modifed": now,  # (sic — field name as observed)
+                        "template": {"timestamp": "2:1", "value": "Blank"},
+                    }
+                    for i, pu in enumerate(page_uuids)
                 ],
+                # CRDT author table mapping the author index used by the
+                # AuthorIdsBlock in each .rm payload
+                "uuids": [{"first": str(author), "second": 1}],
             },
+            "coverPageNumber": -1,
+            "customZoomCenterX": 0,
+            "customZoomCenterY": 936,
+            "customZoomOrientation": orientation,
+            "customZoomPageHeight": 1872,
+            "customZoomPageWidth": 1404,
+            "customZoomScale": 1,
+            "documentMetadata": {},
+            "extraMetadata": {},
+            "fileType": "notebook",
+            "fontName": "",
             "formatVersion": 2,
+            "lineHeight": -1,
+            "orientation": orientation,
+            "pageCount": len(doc.pages),
+            "pageTags": [],
+            "sizeInBytes": str(sum(len(b) for b in rm_payloads)),
+            "tags": [],
+            "textAlignment": "justify",
+            "textScale": 1,
+            "zoomMode": "bestFit",
         }
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr(f"{doc_uuid}.metadata", json.dumps(metadata, indent=4))
             zf.writestr(f"{doc_uuid}.content", json.dumps(content, indent=4))
-            author = uuidlib.uuid4()
-            for pu, page in zip(page_uuids, doc.pages):
-                buf = io.BytesIO()
-                write_blocks(buf, page_to_blocks(page, author=author))
-                zf.writestr(f"{doc_uuid}/{pu}.rm", buf.getvalue())
+            zf.writestr(f"{doc_uuid}.local",
+                        json.dumps({"contentFormatVersion": 2}, indent=4))
+            for pu, payload in zip(page_uuids, rm_payloads):
+                zf.writestr(f"{doc_uuid}/{pu}.rm", payload)
+
+
+def _fractional_index(i: int) -> str:
+    """xochitl-style fractional-index page keys, lexicographically
+    ordered: "ba", "bb", ... (a single-page cache doc shows "ba")."""
+    prefix, letter = divmod(i, 25)
+    return "b" + "z" * prefix + chr(ord("a") + letter)

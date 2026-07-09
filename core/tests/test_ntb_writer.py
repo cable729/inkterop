@@ -347,7 +347,10 @@ def test_written_container_mirrors_fixture(tmp_path):
     # root constants mirror the fixture: u16 = 12, opaque 16B, created u64
     t = _Table(bundle, struct.unpack_from("<I", bundle, 0)[0])
     assert struct.unpack_from("<H", bundle, t._field(7))[0] == 12
-    assert t.bytes_at(0, 16) == bytes(16)
+    # opaque 16B is random per write (never zeros in app files), 8-aligned
+    assert len(t.bytes_at(0, 16)) == 16
+    assert t.bytes_at(0, 16) != bytes(16)
+    assert t._field(0) % 8 == 0
     assert t._field(4) % 8 == 0  # u64 stays absolutely aligned
     # op sequence numbers: 0, 1, then odd ascending for strokes
     seqs = [struct.unpack_from("<II", bundle, _Table(bundle, p)._field(0))[1]

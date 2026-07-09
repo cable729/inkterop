@@ -364,6 +364,7 @@ class GoodnotesReader:
             for page_uuid in _page_order(zf):
                 raw = zf.read(f"notes/{page_uuid}")
                 strokes = []
+                meta_record_hex = None
                 if raw:
                     try:
                         records = split_delimited(raw)
@@ -371,11 +372,17 @@ class GoodnotesReader:
                         _logger.warning("goodnotes page %s: bad record stream",
                                         page_uuid)
                         records = []
-                    for rec in records:
+                    for i, rec in enumerate(records):
                         try:
-                            strokes.extend(_strokes_from_record(rec))
+                            found = _strokes_from_record(rec)
                         except WireError:
                             continue
+                        if i == 0 and not found:
+                            # leading per-page metadata record — keep the
+                            # raw bytes so the writer can replay them
+                            # verbatim (fields largely [unknown])
+                            meta_record_hex = rec.hex()
+                        strokes.extend(found)
                 # Page-dimension field is [unknown]; assume A4 but grow to
                 # the ink extents so nothing clips on larger papers.
                 xs = [x for s in strokes for x in s.x]
@@ -391,7 +398,11 @@ class GoodnotesReader:
                     bounds=bounds,
                     point_scale=1.0,  # coordinates are already PDF points
                     layers=[ir.Layer(strokes=strokes)],
-                    extra={"goodnotes": {"page_uuid": page_uuid}},
+                    extra={"goodnotes": {
+                        "page_uuid": page_uuid,
+                        **({"meta_record": meta_record_hex}
+                           if meta_record_hex else {}),
+                    }},
                 ))
         return ir.Document(
             format_id=FORMAT_ID,

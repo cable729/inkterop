@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "validate-fixtures",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "/private/tmp/claude-501/-Users-caleb-git-remarkable-interop/f31ef389-b767-4ba7-b2da-aaf463d9ffd9/scratchpad/cors_server.py",
+        "8741"
+      ],
+      "port": 8741
+    }
+  ]
+}

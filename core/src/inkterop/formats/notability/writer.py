@@ -257,7 +257,9 @@ def document_to_note_bundle(doc: ir.Document,
             t += 1000
 
     root = fb.table({
-        0: ("struct", bytes(16), 4),  # [unknown] opaque 16B (hash?); zeros
+        # [unknown] opaque 16B — random-looking in every app file (nonce
+        # or binary id, never zeros); 8-aligned in the app's layout
+        0: ("struct", uuid.uuid4().bytes, 8),
         3: ("ref", fb.string(uid.upper())),
         4: ("u64", created),
         5: ("ref", fb.string(uid)),

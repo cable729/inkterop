@@ -76,12 +76,18 @@ def _element(name: str, v: Any) -> bytes:
 
 
 def _argb_int(color: ir.Color, opacity: float) -> int:
-    """Pack ARGB as the SIGNED int32 Saber (Dart BSON) stores."""
-    v = ((round(max(0.0, min(1.0, opacity)) * 255) << 24)
-         | (round(color.r * 255) << 16)
-         | (round(color.g * 255) << 8)
-         | round(color.b * 255))
-    return v - 2 ** 32 if v >= 2 ** 31 else v
+    """Pack ARGB as the UNSIGNED int Saber (Dart) stores.
+
+    Verified against the Mac fixture: 0xFF000000 black is written as
+    int64 4278190080, not int32 -16777216 — Dart's BSON encoder keeps
+    the unsigned value and widens to int64 when it exceeds int32 range
+    (our encoder does the same). The first app-open check failed with
+    the signed packing.
+    """
+    return ((round(max(0.0, min(1.0, opacity)) * 255) << 24)
+            | (round(color.r * 255) << 16)
+            | (round(color.g * 255) << 8)
+            | round(color.b * 255))
 
 
 def _stroke_doc(s: ir.Stroke, k: float, x0: float, y0: float,
@@ -101,10 +107,12 @@ def _stroke_doc(s: ir.Stroke, k: float, x0: float, y0: float,
         else:
             blobs.append(struct.pack("<2f", xx, yy))
 
+    raw: dict = {}
     if native:
         tool_name = native.tool_id
         size = float(native.params.get("size") or 2.0)
         smoothing = native.params.get("smoothing")
+        raw = dict(native.params.get("raw") or {})
     else:
         tool_name = FAMILY_TOOL.get(s.tool.family if s.tool else None,
                                     "fountainPen")
@@ -125,7 +133,7 @@ def _stroke_doc(s: ir.Stroke, k: float, x0: float, y0: float,
         is_hl = s.tool is not None and s.tool.family is ir.ToolFamily.HIGHLIGHTER
         color, opacity = s.color, (0.5 if is_hl else 1.0)
 
-    return {
+    out = {
         "shape": None,
         "p": blobs,
         "i": page_index,
@@ -134,8 +142,20 @@ def _stroke_doc(s: ir.Stroke, k: float, x0: float, y0: float,
         "c": _argb_int(color, opacity),
         "s": float(size),
         "sm": float(smoothing) if smoothing is not None else 0.5,
-        "sp": False,
     }
+    if raw:
+        # replay tool-option keys the reader captured verbatim, in their
+        # observed position (after sm, before sp), skipping the ones the
+        # writer recomputes above
+        for k, v in raw.items():
+            if k not in out and k != "sp":
+                out[k] = v
+    elif tool_name == "Pencil":
+        # observed app defaults for Pencil tool options — the loader may
+        # require them [inferred from the Mac fixture]
+        out.update({"sl": 0.1, "ts": 1.0, "te": 1.0})
+    out["sp"] = bool(raw.get("sp", False))
+    return out
 
 
 def document_to_sbn2(doc: ir.Document,
@@ -154,12 +174,13 @@ def document_to_sbn2(doc: ir.Document,
                  for t in layer.texts if t.text]
         if quill and not quill[-1]["insert"].endswith("\n"):
             quill[-1] = {"insert": quill[-1]["insert"] + "\n"}  # Quill docs end with \n
-        pages.append({
-            "w": b.width * k,
-            "h": b.height * k,
-            "s": strokes,
-            "q": quill,
-        })
+        page_doc: dict = {"w": b.width * k, "h": b.height * k}
+        # the app omits empty s/q keys entirely (fixture page 2 is {w,h})
+        if strokes:
+            page_doc["s"] = strokes
+        if quill:
+            page_doc["q"] = quill
+        pages.append(page_doc)
     return encode_bson({
         "v": 19, "ni": 0, "b": None, "p": "", "l": 40, "lt": 3,
         "z": pages, "c": 0,
