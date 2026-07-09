@@ -20,6 +20,7 @@ def _load() -> None:
     _LOADED = True
     from ..render.pdf import PdfWriter
     from ..render.svg import SvgWriter
+    from .boox import BooxReader
     from .excalidraw import ExcalidrawReader, ExcalidrawWriter
     from .goodnotes import GoodnotesReader, GoodnotesWriter
     from .inkml import InkmlReader, InkmlWriter
@@ -30,6 +31,7 @@ def _load() -> None:
     from .remarkable.reader import RemarkableReader
     from .remarkable.writer import RemarkablePageWriter, RmdocWriter
     from .saber import SaberReader, SaberWriter
+    from .sdocx import SdocxReader
     from .svg import SvgReader, WriteReader
     from .uim import UimReader
     from .supernote import SupernoteReader, SupernoteWriter
@@ -38,9 +40,11 @@ def _load() -> None:
     _READERS.extend([
         RemarkableReader(), IrJsonReader(), XoppReader(), InkmlReader(),
         GoodnotesReader(), SupernoteReader(), NotabilityReader(),
-        NtbReader(), SaberReader(), NeboReader(), ExcalidrawReader(),
+        NtbReader(), BooxReader(), SaberReader(), NeboReader(),
+        ExcalidrawReader(),
         # WriteReader before SvgReader: both claim .svg, first detect() wins
         WriteReader(), SvgReader(), UimReader(), IsfReader(),
+        SdocxReader(),
     ])
     _WRITERS.extend([
         PdfWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(), SvgWriter(),
