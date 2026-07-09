@@ -24,6 +24,7 @@ def _load() -> None:
     from .goodnotes import GoodnotesReader, GoodnotesWriter
     from .inkml import InkmlReader, InkmlWriter
     from .irjson import IrJsonReader, IrJsonWriter
+    from .isf import IsfReader
     from .nebo import NeboReader
     from .notability import NotabilityReader, NtbReader, NtbWriter
     from .remarkable.reader import RemarkableReader
@@ -39,7 +40,7 @@ def _load() -> None:
         GoodnotesReader(), SupernoteReader(), NotabilityReader(),
         NtbReader(), SaberReader(), NeboReader(), ExcalidrawReader(),
         # WriteReader before SvgReader: both claim .svg, first detect() wins
-        WriteReader(), SvgReader(), UimReader(),
+        WriteReader(), SvgReader(), UimReader(), IsfReader(),
     ])
     _WRITERS.extend([
         PdfWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(), SvgWriter(),
