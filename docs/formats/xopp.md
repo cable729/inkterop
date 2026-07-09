@@ -25,7 +25,7 @@ Document tree: `<xournal><title/><page width height><background/>
 `page`, `background` (partially), `layer`, `stroke`, `text`. We do not read
 or write `<image>` elements (see Known gaps).
 
-Implementation: `core/src/rminterop/formats/xopp/{common,reader,writer}.py`.
+Implementation: `core/src/inkterop/formats/xopp/{common,reader,writer}.py`.
 `common.py` holds the shared lookup tables both directions use.
 
 ## Coordinates & units `[verified]`

@@ -55,7 +55,7 @@ were reverse-engineered for older formats where width wasn't stored, and
 applying them here double-counts pressure (calligraphy → blobs) and
 subtracts speed (ballpoint → hairlines that antialias gray).
 
-Our renderer (`core/src/rminterop/render.py`) approximates the official
+Our renderer (`core/src/inkterop/render.py`) approximates the official
 filled-outline approach by splitting variable-width strokes into
 constant-width runs (tolerance 0.35u) drawn with round caps; highlighters
 draw beneath ink at alpha 0.85 to approximate /Darken without ExtGState
@@ -65,7 +65,7 @@ pikepdf and set `/BM /Darken` on the highlighter ExtGState.
 ## Colors
 
 - `line.color` is a PenColor enum (14-color palette in
-  `core/src/rminterop/pens.py`); `line.color_rgba` (when present) is exact
+  `core/src/inkterop/pens.py`); `line.color_rgba` (when present) is exact
   RGBA and wins. Highlighters always carry `color_rgba` on Paper Pro
   (observed: yellow 255,237,117; green 172,255,133; orange 255,195,140;
   gray 199,199,198).
@@ -91,7 +91,7 @@ pikepdf and set `/BM /Darken` on the highlighter ExtGState.
 
 ## IR mapping (what the reader emits)
 
-Reader: `core/src/rminterop/formats/remarkable/reader.py`. One `ir.Stroke`
+Reader: `core/src/inkterop/formats/remarkable/reader.py`. One `ir.Stroke`
 per `si.Line`, coordinates with text-anchor offsets applied.
 
 Channels: `WIDTH` = `PenModel.width(p)` (i.e. `point.width/4`, floor 0.5u,
@@ -112,11 +112,11 @@ point's); others `STROKED_VARIABLE`; highlighter/shader get
 `blend=DARKEN, cap=SQUARE, underlay=True` (opacity 0.85 / 0.45);
 `ERASER_AREA` opacity 0. `pen_style="rmc"` is a reader option: rmc width
 formulas fill WIDTH, and per-point ballpoint colors go to
-`extra["rminterop"]["point_rgb"]`.
+`extra["inkterop"]["point_rgb"]`.
 
 ## Renderer quirks that goldens pin (do not "fix" casually)
 
-Port of the validated renderer lives in `core/src/rminterop/render/`
+Port of the validated renderer lives in `core/src/inkterop/render/`
 (`primitives.py` + `pdf.py`); output verified op-identical on the whole
 library (110/110 docs, scripts/ab_check.py).
 

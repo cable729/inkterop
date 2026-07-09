@@ -48,5 +48,5 @@ def restyled(stroke: Stroke) -> Stroke:
     return Stroke(
         x=stroke.x, y=stroke.y, tool=stroke.tool, color=stroke.color,
         channels=stroke.channels, appearance=default_appearance(stroke),
-        extra={k: v for k, v in stroke.extra.items() if k != "rminterop"},
+        extra={k: v for k, v in stroke.extra.items() if k != "inkterop"},
     )

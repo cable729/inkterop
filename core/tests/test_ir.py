@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from rminterop import ir
-from rminterop.ir import serialize
+from inkterop import ir
+from inkterop.ir import serialize
 
 
 def sample_document() -> ir.Document:
@@ -116,7 +116,7 @@ def test_serialize_round_trip():
 
 def test_serialize_rejects_unknown_version():
     with pytest.raises(ValueError, match="unsupported IR version"):
-        serialize.document_from_dict({"rminterop_ir": 999})
+        serialize.document_from_dict({"inkterop_ir": 999})
 
 
 def test_page_strokes_skips_invisible_layers():

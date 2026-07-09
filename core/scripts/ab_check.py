@@ -25,9 +25,9 @@ import pikepdf
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from rminterop.config import Config  # noqa: E402
-from rminterop.library import Library  # noqa: E402
-from rminterop.render import render_notebook  # noqa: E402
+from inkterop.config import Config  # noqa: E402
+from inkterop.library import Library  # noqa: E402
+from inkterop.render import render_notebook  # noqa: E402
 
 
 def _jsonable(obj):

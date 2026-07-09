@@ -9,7 +9,7 @@ the ecosystem survey.
 
 ## Layout
 
-- `core/` — Python engine (`rminterop`, uv project).
+- `core/` — Python engine (`inkterop`, uv project).
   - `ir/` — the neutral ink IR every conversion passes through
     (three-fidelity model: raw channels / exact appearance / semantic tool).
   - `formats/` — one reader/writer pair per format + registry.
@@ -24,7 +24,7 @@ the ecosystem survey.
   `core/tests/fixtures/<format>/` instead.
 - `device-mods/` — XOVI/qmd kit + warranty rollback. Time-sensitive:
   ROADMAP Phase 0 (device leaves for repair ~2026-07-12).
-- `macos/` — (not started) SwiftUI menu-bar shell around `rminterop watch`.
+- `macos/` — (not started) SwiftUI menu-bar shell around `inkterop watch`.
 - `docs/` — roadmap, IR spec, per-format specs (with
   [verified]/[inferred]/[unknown] confidence markers), RE methodology,
   corpus protocol, validated-writes policy.
@@ -35,11 +35,11 @@ the ecosystem survey.
 cd core
 uv run pytest -q                    # full suite incl. golden fidelity tests
 uv run pytest --update-goldens      # ONLY after an intentional render change
-uv run rminterop ls                 # list the real library
-uv run rminterop render "Name"      # render one doc to PDF
-uv run rminterop mirror             # incremental mirror pass
-uv run rminterop convert IN OUT [--fidelity exact|native|raw]
-uv run rminterop inspect IN [--json]   # parsed-content summary (RE workhorse)
+uv run inkterop ls                 # list the real library
+uv run inkterop render "Name"      # render one doc to PDF
+uv run inkterop mirror             # incremental mirror pass
+uv run inkterop convert IN OUT [--fidelity exact|native|raw]
+uv run inkterop inspect IN [--json]   # parsed-content summary (RE workhorse)
 uv run python scripts/ab_check.py snapshot|compare  # whole-library A/B
 ./launchd/install.sh                # (re)install the watch daemon
 python3 ../tools/re/inventory.py f.goodnotes  # first look at unknown files
@@ -84,10 +84,10 @@ python3 ../tools/re/inventory.py f.goodnotes  # first look at unknown files
 
 ## State that lives outside the repo
 
-- Mirror output: `iCloud Drive/reMarkable/` (+ `.rminterop-state.json`).
-- Config: `~/.config/rminterop/config.toml`; status for UI shells:
-  `~/.config/rminterop/status.json`; daemon log: `~/.config/rminterop/watch.log`.
-- launchd agent: `com.rminterop.watch` (`launchctl list | grep rminterop`).
+- Mirror output: `iCloud Drive/reMarkable/` (+ `.inkterop-state.json`).
+- Config: `~/.config/inkterop/config.toml`; status for UI shells:
+  `~/.config/inkterop/status.json`; daemon log: `~/.config/inkterop/watch.log`.
+- launchd agent: `com.inkterop.watch` (`launchctl list | grep inkterop`).
 
 ## Style
 

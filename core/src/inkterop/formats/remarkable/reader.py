@@ -132,7 +132,7 @@ def _stroke_from_line(line: si.Line, dx: float, dy: float,
     if pen_style == "rmc":
         point_rgb = [pen.color(p) for p in pts]
         if any(c != point_rgb[0] for c in point_rgb):
-            extra["rminterop"] = {"point_rgb": [list(c) for c in point_rgb]}
+            extra["inkterop"] = {"point_rgb": [list(c) for c in point_rgb]}
 
     appearance = ir.StrokeAppearance(
         mode=(ir.GeometryMode.STROKED_CONSTANT if constant_width

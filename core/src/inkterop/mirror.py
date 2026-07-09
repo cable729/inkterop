@@ -1,7 +1,7 @@
 """Incrementally mirror the library to a folder of PDFs.
 
 State (per-doc lastModified at time of last successful render) lives in
-<output_dir>/.rminterop-state.json. Writes are atomic (temp file + rename)
+<output_dir>/.inkterop-state.json. Writes are atomic (temp file + rename)
 so iCloud never syncs a half-written PDF. A status file is maintained for
 UI shells (menu-bar app) to display.
 """
@@ -18,8 +18,8 @@ from .library import Document, Library
 
 _logger = logging.getLogger(__name__)
 
-STATE_NAME = ".rminterop-state.json"
-STATUS_PATH = Path.home() / ".config/rminterop/status.json"
+STATE_NAME = ".inkterop-state.json"
+STATUS_PATH = Path.home() / ".config/inkterop/status.json"
 
 
 def _wanted(lib: Library, doc: Document, cfg: Config) -> bool:
@@ -67,7 +67,7 @@ def mirror_once(cfg: Config | None = None, cache_dir: Path | None = None) -> dic
             skipped += 1
             continue
         pages = [doc.dir / f"{u}.rm" for u in doc.page_uuids]
-        tmp = out_pdf.with_name(out_pdf.name + ".rminterop-tmp")
+        tmp = out_pdf.with_name(out_pdf.name + ".inkterop-tmp")
         try:
             render_notebook(pages, tmp, doc.orientation == "landscape",
                             cfg.render_config(), templates=doc.page_templates)

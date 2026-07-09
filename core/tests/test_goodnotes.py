@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from rminterop import ir
-from rminterop.formats.goodnotes import GoodnotesReader
-from rminterop.formats.goodnotes.reader import extract_path, parse_tpl
-from rminterop.formats.goodnotes.wire import (
+from inkterop import ir
+from inkterop.formats.goodnotes import GoodnotesReader
+from inkterop.formats.goodnotes.reader import extract_path, parse_tpl
+from inkterop.formats.goodnotes.wire import (
     apple_lz4_decompress,
     fields_by_number,
     lz4_block_decompress,
@@ -168,7 +168,7 @@ def test_does_not_detect_other_formats():
 
 @needs_corpus
 def test_sample_to_pdf(tmp_path):
-    from rminterop.convert import convert
+    from inkterop.convert import convert
 
     out = tmp_path / "gn.pdf"
     convert(CORPUS / "Test4.goodnotes", out)

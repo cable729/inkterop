@@ -1,4 +1,4 @@
-"""IR-JSON: rminterop's own lossless interchange format (.json).
+"""IR-JSON: inkterop's own lossless interchange format (.json).
 
 This is the `--fidelity raw` flagship target for local tooling: the full
 IR — raw per-point channels, appearance, and semantic tools together —
@@ -25,7 +25,7 @@ class IrJsonReader:
         try:
             with open(path, "rb") as f:
                 head = f.read(4096)
-            return b'"rminterop_ir"' in head
+            return b'"inkterop_ir"' in head
         except OSError:
             return False
 

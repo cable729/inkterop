@@ -45,7 +45,7 @@ def stroke_runs(stroke: ir.Stroke) -> list[Run]:
     if alphas is None:
         alphas = [app.opacity if app else 1.0] * n
 
-    point_rgb = stroke.extra.get("rminterop", {}).get("point_rgb")
+    point_rgb = stroke.extra.get("inkterop", {}).get("point_rgb")
     base_rgb = tuple((app.color if app else stroke.color).rgb())
     rgbs = ([tuple(c) for c in point_rgb] if point_rgb else [base_rgb] * n)
 

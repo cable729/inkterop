@@ -5,9 +5,9 @@ its way out.
 
 ## The rule
 
-`FormatWriter.validated: bool` (`core/src/rminterop/formats/base.py`) is
+`FormatWriter.validated: bool` (`core/src/inkterop/formats/base.py`) is
 part of every writer's contract. `convert()`
-(`core/src/rminterop/convert.py`) checks it before writing anything:
+(`core/src/inkterop/convert.py`) checks it before writing anything:
 
 ```python
 if not writer.validated and not experimental:

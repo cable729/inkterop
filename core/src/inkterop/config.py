@@ -1,6 +1,6 @@
 """TOML config for the mirror engine.
 
-Default location: ~/.config/rminterop/config.toml (created on first run).
+Default location: ~/.config/inkterop/config.toml (created on first run).
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ from pathlib import Path
 
 from .render import LETTER_LANDSCAPE, LETTER_PORTRAIT, RenderConfig
 
-DEFAULT_PATH = Path.home() / ".config/rminterop/config.toml"
+DEFAULT_PATH = Path.home() / ".config/inkterop/config.toml"
 
 DEFAULT_TOML = """\
-# rminterop configuration
+# inkterop configuration
 
 [output]
 # Where mirrored PDFs go. Default: iCloud Drive/reMarkable

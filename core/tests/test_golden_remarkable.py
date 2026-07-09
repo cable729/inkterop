@@ -17,7 +17,7 @@ from pathlib import Path
 import pikepdf
 import pytest
 
-from rminterop.render import RenderConfig, render_notebook
+from inkterop.render import RenderConfig, render_notebook
 
 FIXTURES = Path(__file__).parent / "fixtures" / "remarkable"
 GOLDEN = Path(__file__).parent / "golden"

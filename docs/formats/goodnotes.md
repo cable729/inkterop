@@ -83,7 +83,7 @@ constant-width segments (ball pen?).
 Apple `libcompression` framed LZ4 `[verified]`:
 `bv41 <u32 decompressed_size> <u32 compressed_size> <LZ4 block>` …
 terminated by `bv4$`; `bv4-` prefixes a raw (uncompressed) block.
-Independent decoder: `core/src/rminterop/formats/goodnotes/wire.py`.
+Independent decoder: `core/src/inkterop/formats/goodnotes/wire.py`.
 
 Decompressed layout `[verified against all public samples, no residual
 bytes]` — this typed-section structure is our finding:
@@ -167,7 +167,7 @@ falls back to zip order.
 
 ## Reader
 
-`core/src/rminterop/formats/goodnotes/` — ink + color only, marked
+`core/src/inkterop/formats/goodnotes/` — ink + color only, marked
 experimental. Emits IR strokes with a WIDTH channel and
 `STROKED_VARIABLE` appearance; tool family is always PEN until the
 pen-type field is found.

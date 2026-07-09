@@ -1,6 +1,6 @@
 # Supernote `.note` (Ratta)
 
-Reader: `core/src/rminterop/formats/supernote/` (`SupernoteReader`,
+Reader: `core/src/inkterop/formats/supernote/` (`SupernoteReader`,
 raster-first). Backed by [supernotelib](https://github.com/jya-dev/supernote-tool)
 (Apache-2.0), pinned `>=0.7.1` in `core/pyproject.toml`; behavior below
 was verified against supernotelib **0.7.1** source and synthetic

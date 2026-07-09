@@ -3,14 +3,14 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.rminterop.watch</string>
+    <string>com.inkterop.watch</string>
     <key>ProgramArguments</key>
     <array>
         <string>__UV__</string>
         <string>run</string>
         <string>--project</string>
         <string>__CORE__</string>
-        <string>rminterop</string>
+        <string>inkterop</string>
         <string>watch</string>
     </array>
     <key>RunAtLoad</key>
@@ -18,8 +18,8 @@
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>__HOME__/.config/rminterop/watch.log</string>
+    <string>__HOME__/.config/inkterop/watch.log</string>
     <key>StandardErrorPath</key>
-    <string>__HOME__/.config/rminterop/watch.log</string>
+    <string>__HOME__/.config/inkterop/watch.log</string>
 </dict>
 </plist>

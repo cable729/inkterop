@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from rminterop import ir
-from rminterop.formats.base import Fidelity
-from rminterop.formats.inkml import InkmlReader, InkmlWriter
+from inkterop import ir
+from inkterop.formats.base import Fidelity
+from inkterop.formats.inkml import InkmlReader, InkmlWriter
 
 RM_SCALE = 685.0 / 2160.0
 
@@ -167,7 +167,7 @@ def test_double_quote_prefix_decoding(tmp_path):
 
 
 def test_foreign_inkml(tmp_path):
-    """Minimal InkML with no rminterop annotations parses cleanly."""
+    """Minimal InkML with no inkterop annotations parses cleanly."""
     path = _write(
         tmp_path, "foreign.inkml",
         "<traceFormat>"
@@ -216,7 +216,7 @@ def test_foreign_brush_and_context(tmp_path):
 
 def test_remarkable_fixture_round_trip(tmp_path):
     """End-to-end: real .rm fixture -> IR -> InkML -> IR."""
-    from rminterop.formats.remarkable import read_page
+    from inkterop.formats.remarkable import read_page
 
     rm = (Path(__file__).parent / "fixtures" / "remarkable"
           / "fineliner-pencil-colors.rm")

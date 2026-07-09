@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from rminterop.library import Library
-from rminterop.render import RenderConfig, render_notebook
+from inkterop.library import Library
+from inkterop.render import RenderConfig, render_notebook
 
 
 @pytest.fixture

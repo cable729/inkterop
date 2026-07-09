@@ -11,7 +11,7 @@ US.
 
 ## Why this is legitimate
 
-rminterop exists to make note files **interoperate** — read a format you
+inkterop exists to make note files **interoperate** — read a format you
 already have files in, convert them to formats other tools understand. It
 only ever operates on files the user owns and already has access to
 (exports, backups, the local app cache). No sample in this repo's history
@@ -69,7 +69,7 @@ basic stroke-triplet (x, y, width) shape were first published in the
 README of [franzthiemann/goodparse](https://github.com/franzthiemann/goodparse)
 (GPL-3.0). We used those documented *facts* and goodparse's public sample
 files (`corpus/third-party/goodparse/samples/`) to write an independent
-decoder (`core/src/rminterop/formats/goodnotes/wire.py`) —
+decoder (`core/src/inkterop/formats/goodnotes/wire.py`) —
 goodparse's Python source was **deliberately not opened or read**. The
 typed-section layout inside the geometry blob (the `tpl\0` structure
 documented in `docs/formats/goodnotes.md`) goes beyond what goodparse's

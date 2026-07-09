@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from rminterop import ir
-from rminterop.formats.supernote import SupernoteReader
+from inkterop import ir
+from inkterop.formats.supernote import SupernoteReader
 
 FIXTURES = Path(__file__).parent / "fixtures" / "supernote"
 TWO_PAGE = FIXTURES / "synthetic-two-page.note"
@@ -108,7 +108,7 @@ def test_pdf_conversion_smoke(tmp_path):
     come out blank; we only assert the pipeline accepts the document and
     emits a well-formed PDF.
     """
-    from rminterop.render.pdf import render_document
+    from inkterop.render.pdf import render_document
 
     doc = SupernoteReader().read(TWO_PAGE)
     doc.validate()

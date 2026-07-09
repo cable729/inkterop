@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from rminterop import ir
-from rminterop.formats.base import Fidelity
-from rminterop.formats.xopp import XoppReader, XoppWriter
+from inkterop import ir
+from inkterop.formats.base import Fidelity
+from inkterop.formats.xopp import XoppReader, XoppWriter
 
 FIXTURES = Path(__file__).parent / "fixtures" / "xopp"
 
@@ -154,7 +154,7 @@ def test_reads_handwritten_xournalpp_file(tmp_path):
 
 def test_remarkable_fixture_to_xopp(tmp_path):
     """End-to-end: real .rm fixture -> IR -> xopp -> IR sanity."""
-    from rminterop.formats.remarkable import read_page
+    from inkterop.formats.remarkable import read_page
 
     rm = (Path(__file__).parent / "fixtures" / "remarkable"
           / "fineliner-pencil-colors.rm")

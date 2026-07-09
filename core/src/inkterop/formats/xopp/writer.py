@@ -68,8 +68,8 @@ def _text_xml(t: ir.TextBlock, scale: float, x0: float, y0: float) -> str:
 
 def document_to_xml(doc: ir.Document, fidelity: Fidelity = Fidelity.EXACT) -> str:
     out = ['<?xml version="1.0" standalone="no"?>',
-           '<xournal creator="rminterop" fileversion="4">',
-           f"<title>{escape(doc.title or 'rminterop export')}</title>"]
+           '<xournal creator="inkterop" fileversion="4">',
+           f"<title>{escape(doc.title or 'inkterop export')}</title>"]
     for page in doc.pages:
         scale = page.point_scale
         b = page.bounds

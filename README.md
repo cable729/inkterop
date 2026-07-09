@@ -1,4 +1,4 @@
-# remarkable-interop / rminterop
+# remarkable-interop / inkterop
 
 A universal converter between handwritten-note formats — e-ink devices,
 note apps, and display formats — plus the reMarkable → PDF mirror it grew
@@ -6,17 +6,17 @@ out of.
 
 No cross-app handwriting converter existed before this project: every app
 speaks its own (usually undocumented) format, and "interop" meant flat PDF
-export. rminterop reads native ink — the actual pen strokes, with
+export. inkterop reads native ink — the actual pen strokes, with
 per-point width/pressure/tilt where the source stores them — into a
 documented intermediate representation ([docs/ir.md](docs/ir.md)) and
 writes it back out.
 
 ```sh
 cd core
-uv run rminterop convert notes.goodnotes notes.xopp   # GoodNotes -> Xournal++, editable ink
-uv run rminterop convert "My Notebook" out.pdf        # reMarkable library doc -> PDF
-uv run rminterop convert notes.sba raw.json --fidelity raw   # raw per-point pen data
-uv run rminterop inspect mystery.note                 # what's inside?
+uv run inkterop convert notes.goodnotes notes.xopp   # GoodNotes -> Xournal++, editable ink
+uv run inkterop convert "My Notebook" out.pdf        # reMarkable library doc -> PDF
+uv run inkterop convert notes.sba raw.json --fidelity raw   # raw per-point pen data
+uv run inkterop inspect mystery.note                 # what's inside?
 ```
 
 ## Format support
@@ -42,7 +42,7 @@ dynamics). See [docs/ir.md](docs/ir.md).
 
 ## Repo layout
 
-- **`core/`** — `rminterop`, the Python engine (uv project): the IR,
+- **`core/`** — `inkterop`, the Python engine (uv project): the IR,
   format readers/writers, PDF/SVG renderers, the `convert`/`inspect` CLI,
   and the original mirror pipeline — reads the reMarkable desktop app's
   local library cache and renders faithful PDFs into iCloud Drive via a
@@ -72,7 +72,7 @@ Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 ```sh
 cd core
 uv run pytest -q        # 80 tests; no device needed
-uv run rminterop --help
+uv run inkterop --help
 ```
 
 ## Start here

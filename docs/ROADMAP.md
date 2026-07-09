@@ -46,11 +46,11 @@ representation so any ink format can convert to any other. See
 `docs/corpus-protocol.md` for how the undocumented formats were (and will
 keep being) decoded, `docs/validated-writes.md` for write-safety policy.
 
-- **IR** (`core/src/rminterop/ir/`): neutral document/stroke model,
+- **IR** (`core/src/inkterop/ir/`): neutral document/stroke model,
   per-point channels (pressure/tilt/width/alpha/…), three-fidelity model
   (exact/native/raw), IR-JSON serialization.
 - **Format registry + CLI**: `formats/__init__.py` registry,
-  `rminterop convert` / `rminterop inspect`.
+  `inkterop convert` / `inkterop inspect`.
 - **Readers**: reMarkable (ported onto the IR with zero regression —
   golden byte-for-byte drawing-op tests plus a 110/110 whole-library A/B
   check against the pre-IR renderer), xopp, IR-JSON, InkML, GoodNotes
@@ -99,17 +99,17 @@ keep being) decoded, `docs/validated-writes.md` for write-safety policy.
   `.sdocx`, Boox.
 
 ## Phase 2 — macOS menu-bar app  ◻ NOT STARTED
-SwiftUI `MenuBarExtra` shell that supervises a bundled `rminterop watch`
-(PyInstaller binary), shows `~/.config/rminterop/status.json`, Settings
+SwiftUI `MenuBarExtra` shell that supervises a bundled `inkterop watch`
+(PyInstaller binary), shows `~/.config/inkterop/status.json`, Settings
 window editing the TOML, `SMAppService` login item. Keep ALL logic in
 `core/` — Windows/Linux tray shells reuse the same core + status protocol.
 (Windows: desktop app has an equivalent cache; Linux: no desktop app, use
 rmapi read-only pull as the library source.)
 
 ## Phase 3 — Import lane + iPad trial  ◻ NOT STARTED
-- `rminterop send <pdf> [--folder X]` via ddvk/rmapi (`mkdir`+`put`),
+- `inkterop send <pdf> [--folder X]` via ddvk/rmapi (`mkdir`+`put`),
   ALWAYS preceded by `rmapi` backup (official corruption warning).
-- `rminterop send --editable` via drawj2d 1.4+ (PDF/SVG → .rmdoc native
+- `inkterop send --editable` via drawj2d 1.4+ (PDF/SVG → .rmdoc native
   editable ink, full Paper Pro color).
 - iPad app trial order (rationale in `docs/research.md`): 1. Saber (only
   open-format iPad app; verify writing feel), 2. Nebo (best feel; one-way

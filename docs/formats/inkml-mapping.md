@@ -1,6 +1,6 @@
-# InkML mapping (rminterop)
+# InkML mapping (inkterop)
 
-How `rminterop.formats.inkml` maps the IR onto W3C InkML
+How `inkterop.formats.inkml` maps the IR onto W3C InkML
 (https://www.w3.org/TR/InkML/), and where it extends the standard.
 InkML is the raw-fidelity flagship: the one output format that carries
 every per-point channel *and* the exact source appearance in a single
@@ -20,9 +20,9 @@ only by hand-written fixtures here.
     <brush xml:id="br0">…</brush>
   </definitions>
   <traceGroup xml:id="page0">                        <!-- one per page -->
-    <annotationXML type="rminterop-page"><page …/></annotationXML>
+    <annotationXML type="inkterop-page"><page …/></annotationXML>
     <traceGroup>                                     <!-- one per layer -->
-      <annotationXML type="rminterop-layer"><layer …/></annotationXML>
+      <annotationXML type="inkterop-layer"><layer …/></annotationXML>
       <trace contextRef="#ctx0" brushRef="#br0">x y f …, x y f …</trace>
     </traceGroup>
   </traceGroup>
@@ -46,9 +46,9 @@ this order (only those present on the stroke):
 | `TILT_AZIMUTH`  | `OA`       | rad   | `units="rad"`         | as-is                          | yes       |
 | `TILT_ALTITUDE` | `OE`       | rad   | `units="rad"`         | as-is                          | yes (elevation) |
 | `TIMESTAMP`     | `T`        | s     | `units="s"`           | as-is (seconds since stroke start) | yes   |
-| `WIDTH`         | `W`        | pt    | `units="pt"`          | `width · point_scale`          | name reserved by spec for stroke width; our pt values are an rminterop convention |
-| `SPEED`         | `S`        | —     | —                     | as-is (source units/s)         | **no** — spec reserves `S` for tip-switch state; rminterop reuses it |
-| `ALPHA`         | `A`        | 0–1   | `min="0" max="1"`     | as-is                          | **no** — rminterop extension |
+| `WIDTH`         | `W`        | pt    | `units="pt"`          | `width · point_scale`          | name reserved by spec for stroke width; our pt values are an inkterop convention |
+| `SPEED`         | `S`        | —     | —                     | as-is (source units/s)         | **no** — spec reserves `S` for tip-switch state; inkterop reuses it |
+| `ALPHA`         | `A`        | 0–1   | `min="0" max="1"`     | as-is                          | **no** — inkterop extension |
 
 The reader inverts every transform (`x = X / point_scale + x_min`,
 `WIDTH = W / point_scale`) using the page annotation; foreign files
@@ -86,12 +86,12 @@ Lossless state lives in the `annotationXML`; the hex/4-decimal
 brushProperty values are derived and never read back when the
 annotation is present.
 
-## annotationXML schema (rminterop extension, non-standard)
+## annotationXML schema (inkterop extension, non-standard)
 
 All float attributes in annotations use `repr(float)` — exact
 round-trip, unlike the 4-decimal trace values. **[verified]**
 
-### Brush: `<annotationXML type="rminterop">`
+### Brush: `<annotationXML type="inkterop">`
 
 ```xml
 <tool family="highlighter">                        <!-- ToolFamily value -->
@@ -112,7 +112,7 @@ reader restores `None` (target restyles from the tool family).
 IR enum strings (`GeometryMode`/`BlendMode`/`LineCap`); unknown values
 fall back to variable/normal/round on read. **[verified]**
 
-### Page: `<annotationXML type="rminterop-page">`
+### Page: `<annotationXML type="inkterop-page">`
 
 ```xml
 <page xMin="-810.0" yMin="0.0" xMax="810.0" yMax="2160.0"
@@ -123,7 +123,7 @@ Bounds are in SOURCE units (rM: x centered on 0, grown y). Orientation
 is the document-level hint, stamped on every page; the reader takes the
 first page's value. **[verified]**
 
-### Layer: `<annotationXML type="rminterop-layer">`
+### Layer: `<annotationXML type="inkterop-layer">`
 
 ```xml
 <layer name="ink" visible="true"/>

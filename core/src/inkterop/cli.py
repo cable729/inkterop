@@ -1,4 +1,4 @@
-"""rminterop CLI: mirror | watch | render | ls | convert | inspect"""
+"""inkterop CLI: mirror | watch | render | ls | convert | inspect"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="rminterop")
+    parser = argparse.ArgumentParser(prog="inkterop")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--cache-dir", type=Path, help="override library cache dir")
     parser.add_argument("--config", type=Path, help="config file path")

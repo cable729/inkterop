@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from rminterop import ir
-from rminterop.formats.notability import NotabilityReader, NtbReader
-from rminterop.formats.notability.ntb import decode_point_blob
-from rminterop.formats.notability.reader import read_session
+from inkterop import ir
+from inkterop.formats.notability import NotabilityReader, NtbReader
+from inkterop.formats.notability.ntb import decode_point_blob
+from inkterop.formats.notability.reader import read_session
 
 NTB_FIXTURE = Path(__file__).parent / "fixtures" / "notability" / "scribbles.ntb"
 

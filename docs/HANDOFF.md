@@ -5,8 +5,8 @@ For anyone (human or agent) picking this repo up. Complements
 
 ## What exists and works
 
-- **Universal converter (M1, done)**: `rminterop convert IN OUT
-  [--fidelity exact|native|raw] [--pages N-M]` + `rminterop inspect`.
+- **Universal converter (M1, done)**: `inkterop convert IN OUT
+  [--fidelity exact|native|raw] [--pages N-M]` + `inkterop inspect`.
   Readers: remarkable, goodnotes, notability (.note legacy AND .ntb
   modern), saber, supernote (raster), xopp, inkml, irjson. Writers: pdf,
   svg, inkml, xopp (app-validated), irjson. 80 tests green
@@ -86,7 +86,7 @@ For anyone (human or agent) picking this repo up. Complements
   samples: `corpus/third-party/` (gitignored, `MANIFEST.toml`
   provenance). Self-generated fixtures: `core/tests/fixtures/<format>/`
   (committed, CC0).
-- Caleb's comparison outputs: `~/Documents/rminterop-out/` (disposable).
+- Caleb's comparison outputs: `~/Documents/inkterop-out/` (disposable).
 - App exports used today: `~/Documents` (GoodNotes .goodnotes trio,
   Notability .ntb), `~/Downloads` (Saber .sba + PDF), `~/Desktop`
   (Nebo trio, Notability PDF).

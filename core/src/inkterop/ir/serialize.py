@@ -1,6 +1,6 @@
 """IR <-> JSON.
 
-Used for golden dumps, `rminterop inspect --json`, and `--fidelity raw`
+Used for golden dumps, `inkterop inspect --json`, and `--fidelity raw`
 export. Lossless for everything except Path attachments (stored as paths,
 not embedded; pass embed_attachments=True to inline them base64).
 """
@@ -86,7 +86,7 @@ def document_to_dict(doc: Document, embed_attachments: bool = False) -> dict:
         else:
             attachments[key] = {"data": base64.b64encode(val).decode()}
     return {
-        "rminterop_ir": FORMAT_VERSION,
+        "inkterop_ir": FORMAT_VERSION,
         "format_id": doc.format_id,
         "title": doc.title,
         "orientation": doc.orientation,
@@ -176,8 +176,8 @@ def _stroke_from(d: dict) -> Stroke:
 
 
 def document_from_dict(d: dict) -> Document:
-    if d.get("rminterop_ir") != FORMAT_VERSION:
-        raise ValueError(f"unsupported IR version {d.get('rminterop_ir')!r}")
+    if d.get("inkterop_ir") != FORMAT_VERSION:
+        raise ValueError(f"unsupported IR version {d.get('inkterop_ir')!r}")
     attachments: dict[str, bytes | Path] = {}
     for key, val in d.get("attachments", {}).items():
         attachments[key] = (

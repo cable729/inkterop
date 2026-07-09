@@ -200,7 +200,7 @@ fountain-pen stroke decays 1.27 → 0.38 while pencil and highlighter hold
 
 ### .ntb reader
 
-`core/src/rminterop/formats/notability/ntb.py` — strokes (Bézier chains
+`core/src/inkterop/formats/notability/ntb.py` — strokes (Bézier chains
 flattened at 4 samples/segment), per-point widths, colors, tool mapping,
 title, page size, created timestamp. Not yet mapped: text objects, PDF
 backgrounds, images, audio, multi-page/section behavior.
@@ -216,7 +216,7 @@ backgrounds, images, audio, multi-page/section behavior.
 
 ## Legacy reader
 
-`core/src/rminterop/formats/notability/reader.py` — strokes, colors,
+`core/src/inkterop/formats/notability/reader.py` — strokes, colors,
 per-stroke widths, highlighter inference from alpha. PDF backgrounds,
 text, audio not yet mapped.
 

@@ -1,7 +1,7 @@
 """W3C InkML reader + writer: the raw-fidelity flagship format.
 
 Spec: https://www.w3.org/TR/InkML/. The writer emits a faithful-but-
-pragmatic subset — standard channels (X/Y/F/OA/OE/T) plus rminterop
+pragmatic subset — standard channels (X/Y/F/OA/OE/T) plus inkterop
 extension channels (W/S/A) and `annotationXML` blocks carrying tool,
 appearance and page metadata for lossless round-trips. The reader also
 accepts foreign InkML, including the !/'/" value-prefix encodings
@@ -29,13 +29,13 @@ FORMAT_ID = "inkml"
 INKML_NS = "http://www.w3.org/2003/InkML"
 XML_ID = "{http://www.w3.org/XML/1998/namespace}id"
 
-#: annotationXML `type` markers for the rminterop extension schema.
-ANNOT_BRUSH = "rminterop"
-ANNOT_PAGE = "rminterop-page"
-ANNOT_LAYER = "rminterop-layer"
+#: annotationXML `type` markers for the inkterop extension schema.
+ANNOT_BRUSH = "inkterop"
+ANNOT_PAGE = "inkterop-page"
+ANNOT_LAYER = "inkterop-layer"
 
 #: Canonical channel order after X/Y: (IR channel, InkML name, extra attrs).
-#: F/OA/OE/T are standard InkML; W/S/A are rminterop extensions (W is
+#: F/OA/OE/T are standard InkML; W/S/A are inkterop extensions (W is
 #: spec-reserved for stroke width — compatible; our S/A usage is not).
 _CHANNEL_DEFS: list[tuple[ir.Channel, str, str]] = [
     (ir.Channel.PRESSURE, "F", ' min="0" max="1"'),
@@ -323,7 +323,7 @@ def _parse_brush(el: ElementTree.Element) -> _Brush:
         elif name == "appearance" and app_el is None:
             app_el = c
 
-    if tool_el is None:  # foreign brush: no rminterop annotation
+    if tool_el is None:  # foreign brush: no inkterop annotation
         return _Brush(ir.ToolRef(ir.ToolFamily.PEN),
                       _hex_to_color(props.get("color", "#000000")), None)
 

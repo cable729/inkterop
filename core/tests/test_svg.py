@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from rminterop import ir
-from rminterop.formats.base import Fidelity
-from rminterop.render.svg import SvgWriter, outline_polygon
+from inkterop import ir
+from inkterop.formats.base import Fidelity
+from inkterop.render.svg import SvgWriter, outline_polygon
 
 NS = {"svg": "http://www.w3.org/2000/svg"}
 FIXTURES = Path(__file__).parent / "fixtures" / "remarkable"
@@ -266,7 +266,7 @@ def test_zero_alpha_stroke_skipped(tmp_path):
 
 
 def test_remarkable_fixture_end_to_end(tmp_path):
-    from rminterop.formats.remarkable import read_page
+    from inkterop.formats.remarkable import read_page
 
     page = read_page(FIXTURES / "fineliner-pencil-colors.rm")
     doc = ir.Document(format_id="remarkable", title="fixture", pages=[page])

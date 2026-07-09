@@ -1,6 +1,6 @@
-# The rminterop IR (intermediate representation)
+# The inkterop IR (intermediate representation)
 
-`core/src/rminterop/ir/` is the neutral ink document model every format
+`core/src/inkterop/ir/` is the neutral ink document model every format
 converts through: a reader turns a native file into an `ir.Document`, a
 writer/renderer turns an `ir.Document` into a native file or PDF/SVG.
 N readers + M writers instead of N×M pairwise converters — adding a format
@@ -20,7 +20,7 @@ suite unless marked otherwise.
 | `ir/style.py` | `Color`, `StrokeAppearance`, `GeometryMode`, `BlendMode`, `LineCap` |
 | `ir/tools.py` | `ToolFamily`, `NativeTool`, `ToolRef` |
 | `ir/defaults.py` | `default_appearance()` / `restyled()` — semantic restyling for `fidelity=native` |
-| `ir/serialize.py` | IR ↔ JSON (`rminterop_ir` version 1) |
+| `ir/serialize.py` | IR ↔ JSON (`inkterop_ir` version 1) |
 
 Adjacent, not part of the IR itself: `formats/base.py` (the `Fidelity`
 enum + `FormatReader`/`FormatWriter` protocols), `formats/__init__.py`
@@ -86,7 +86,7 @@ unbounded/source-specific.
 ## The three-fidelity model
 
 `Fidelity` (`formats/base.py`) names the three layers of information a
-stroke carries; `rminterop convert --fidelity exact|native|raw` selects
+stroke carries; `inkterop convert --fidelity exact|native|raw` selects
 which one the writer honors.
 
 - **exact** — reproduce the *source app's* rendering. Consumes
@@ -94,7 +94,7 @@ which one the writer honors.
   behavior). Default.
 - **native** — map tools semantically; the *target* restyles them.
   Writers ignore `appearance` and rebuild it from `ToolFamily` via
-  `ir/defaults.py: restyled()` (which also strips the `"rminterop"` key
+  `ir/defaults.py: restyled()` (which also strips the `"inkterop"` key
   from `Stroke.extra`).
 - **raw** — the per-point event data itself (the channels). Only formats
   that can hold pen dynamics accept it: IR-JSON and InkML. PDF/SVG/xopp
@@ -135,11 +135,11 @@ rendering semantics (that's how `SHADER` earned its slot).
 `Document`, `Page`, `Stroke`, and `TextBlock` all have an
 `extra: dict[str, Any]` for format-specific carry-through. Convention:
 **top-level keys are format ids** (`"remarkable"`, `"goodnotes"`,
-`"supernote"`, …) so payloads never collide. The key `"rminterop"` is
-reserved for our own pipeline (currently: `extra["rminterop"]["point_rgb"]`,
+`"supernote"`, …) so payloads never collide. The key `"inkterop"` is
+reserved for our own pipeline (currently: `extra["inkterop"]["point_rgb"]`,
 per-point colors emitted by the reMarkable reader's `pen_style="rmc"`
 mode and consumed by `render/primitives.py`). `restyled()` drops the
-`"rminterop"` key; format keys survive restyling.
+`"inkterop"` key; format keys survive restyling.
 
 ## Appearance semantics
 
@@ -180,10 +180,10 @@ mode and consumed by `render/primitives.py`). `restyled()` drops the
 ## Serialization (IR-JSON)
 
 `ir/serialize.py` round-trips the whole model through JSON. Top-level
-marker: `"rminterop_ir": 1` (bump `FORMAT_VERSION` on breaking change;
+marker: `"inkterop_ir": 1` (bump `FORMAT_VERSION` on breaking change;
 `document_from_dict` rejects other versions). Used by golden dumps,
-`rminterop inspect --json`, and the `.json` reader/writer
-(`formats/irjson.py`, detection = `"rminterop_ir"` in the first 4 KB).
+`inkterop inspect --json`, and the `.json` reader/writer
+(`formats/irjson.py`, detection = `"inkterop_ir"` in the first 4 KB).
 
 - Lossless for everything except `Path` attachments, which serialize as
   paths unless `embed_attachments=True` inlines them base64 (the

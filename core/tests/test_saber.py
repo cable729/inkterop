@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from rminterop import ir
-from rminterop.formats.saber import SaberReader
-from rminterop.formats.saber.reader import parse_bson
+from inkterop import ir
+from inkterop.formats.saber import SaberReader
+from inkterop.formats.saber.reader import parse_bson
 
 FIXTURE = Path(__file__).parent / "fixtures" / "saber" / \
     "saber-mac-pens-text.sba"
@@ -69,7 +69,7 @@ def test_read_fixture():
 
 
 def test_fixture_to_pdf(tmp_path):
-    from rminterop.convert import convert
+    from inkterop.convert import convert
 
     out = tmp_path / "saber.pdf"
     convert(FIXTURE, out)
