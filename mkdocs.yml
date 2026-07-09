@@ -78,6 +78,15 @@ nav:
       - Supernote: formats/supernote.md
       - Saber: formats/saber.md
       - Nebo / MyScript: formats/nebo.md
+      - OneNote: formats/onenote.md
+      - MS-ISF: formats/isf.md
+      - Apple PencilKit: formats/pencilkit.md
+      - Samsung Notes: formats/sdocx.md
+      - Onyx Boox: formats/boox.md
+      - Wacom UIM: formats/uim.md
+      - Excalidraw: formats/excalidraw.md
+      - tldraw: formats/tldraw.md
+      - SVG / Stylus Labs Write: formats/svg.md
       - Xournal++: formats/xopp.md
       - InkML mapping: formats/inkml-mapping.md
   - Methodology:
