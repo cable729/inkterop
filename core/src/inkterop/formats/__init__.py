@@ -21,7 +21,7 @@ def _load() -> None:
     from ..render.pdf import PdfWriter
     from ..render.svg import SvgWriter
     from .excalidraw import ExcalidrawReader, ExcalidrawWriter
-    from .goodnotes import GoodnotesReader
+    from .goodnotes import GoodnotesReader, GoodnotesWriter
     from .inkml import InkmlReader, InkmlWriter
     from .irjson import IrJsonReader, IrJsonWriter
     from .nebo import NeboReader
@@ -45,6 +45,7 @@ def _load() -> None:
         PdfWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(), SvgWriter(),
         SaberWriter(), ExcalidrawWriter(),
         RemarkablePageWriter(), RmdocWriter(), SupernoteWriter(),
+        GoodnotesWriter(),
     ])
 
 

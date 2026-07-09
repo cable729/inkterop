@@ -172,6 +172,41 @@ experimental. Emits IR strokes with a WIDTH channel and
 `STROKED_VARIABLE` appearance; tool family is always PEN until the
 pen-type field is found.
 
+## Writer (experimental, validated=False)
+
+`core/src/inkterop/formats/goodnotes/writer.py` — the exact inverse of the
+reader's consumption, gated behind `--experimental` until the GoodNotes
+Mac app-import check passes (docs/validated-writes.md). What it emits:
+
+- **Container**: ZIP with `schema.pb` (field 1 varint = 24), `index.notes.pb`
+  (one delimited record per page: field 1 = page UUID, field 2 =
+  `notes/<UUID>` path — both fields as observed in the Mac-export fixture),
+  one `notes/<UUID>` per page, and a tiny white `thumbnail.jpg`. This is
+  the **minimum our reader needs**; the app's other members
+  (index.events.pb, index.search.pb, index.attachments.pb,
+  document.info.pb, search/) are not written — whether the app tolerates
+  their absence is `[unknown]`.
+- **Page stream**: a leading metadata record (field 1 = page UUID,
+  field 16 = schema version 24), then one stroke record per IR stroke
+  (record field 7 = stroke message with fields 1 uuid / 2 geometry /
+  4 color / 7 pen type / 21 schema version).
+- **Geometry**: every stroke uses the pressure-pen tpl signature
+  (`vA(v)A(u)A(u)A(v)A(v)A(u)A(u)A(u)A(u)A(v)`) with a 3-float anchor and
+  flat (x, y, width) triplets; the constant-width/pencil/brush section
+  layouts are not re-emitted. LZ4 framing uses raw `bv4-` blocks
+  (≤ 64 KiB each) + `bv4$` — legal frames, zero compression (the ZIP
+  deflates on top). Triplets are clamped to the reader's plausibility
+  window and dots/two-point strokes are padded to 3 points; points at
+  (~0, ~0) are nudged off the sub-path-break sentinel.
+- **Pen types**: NativeTool ids from a GoodNotes source round-trip
+  verbatim; otherwise highlighter → 4, pencil → 3, everything else → 0.
+- **Fidelity**: `exact` emits per-point rendered widths (appearance.width
+  or the WIDTH channel), `native` constant family-default widths
+  (24 pt highlighter, 1.56 pt pens), `raw` raises (GoodNotes stores
+  rendered widths, not raw dynamics).
+- **Page dimensions**: the dims field is still `[unknown]`, so written
+  pages implicitly assume A4; ink extents drive the reader's bounds.
+
 ## Open questions (corpus cases that resolve them)
 
 1. Pen-type id → UI tool names — case 05 with labeled per-tool files.
@@ -190,6 +225,9 @@ pen-type field is found.
 
 ## Changelog
 
+- 2026-07-09 (night): experimental writer (validated=False): wire/LZ4/tpl
+  encoders as exact decoder inverses; minimal container; pressure-pen
+  triplet geometry for all pen types; fixture write→read round-trip green.
 - 2026-07-09 (evening): first controlled Mac-app export (schema 25):
   pen-type field found and verified; full signature grammar (structs,
   segment arrays); constant-width and pencil layouts; 9-float brush

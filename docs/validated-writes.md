@@ -110,10 +110,10 @@ failure recorded here, not silently left `True`.
 | Saber (`.sba`/`.sbn2`) | `formats/saber/writer.py: SaberWriter` | **`False`** | First native-app writer. Round-trip covered by `core/tests/test_saber.py` (synthetic + fixture); awaiting the Saber Mac app-open check. Saber is open source, so the risk profile is milder than closed apps, but the app's loader — not our reader — is still the authority. |
 | reMarkable (`.rm`/`.rmdoc`) | `formats/remarkable/writer.py` | **`False`** | Same-format round-trip int-exact on all four device fixtures (`core/tests/test_remarkable_writer.py`); awaiting desktop-app UI import check of a written `.rmdoc` — the only sanctioned validation path (never the cache/cloud). |
 | Supernote (`.note`) | `formats/supernote/writer.py: SupernoteWriter` | **`False`** | Raster-only writer; write->read crosses an independent parser (supernotelib) with pixel-bbox asserts (`core/tests/test_supernote_writer.py`). Awaiting a real device / Partner-app open check. |
+| GoodNotes (`.goodnotes`) | `formats/goodnotes/writer.py: GoodnotesWriter` | **`False`** | Encoder inverses property-tested; synthetic + Mac-export fixture write->read round-trips (`core/tests/test_goodnotes_writer.py`). Awaiting the GoodNotes Mac app-import check — closed app, loader strictness unknown (minimal member set, raw `bv4-` LZ4 frames). |
 
-The remaining native writers (GoodNotes `.goodnotes`, Notability
-`.ntb`) are in flight on the
-note-apps workstream; each starts `validated = False`, ships behind
+The remaining native writer (Notability `.ntb`) is in flight on the
+note-apps workstream; it starts `validated = False`, ships behind
 `--experimental`, and only flips once a checklist row above documents a
 real app-open check on the real app.
 
