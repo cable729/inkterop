@@ -72,30 +72,37 @@ keep being) decoded, `docs/validated-writes.md` for write-safety policy.
   confidence markers on unverified claims.
 - **License**: MIT.
 
-## M2 — next
-- **GoodNotes**: pen-type/pressure fields (open questions 1–3 in
-  `docs/formats/goodnotes.md`) via the Mac-app corpus
-  (`docs/corpus-protocol.md` cases 05/07/14/16).
-- **Notability**: `curvesfractionalwidths` → stroke mapping
-  (`docs/formats/notability.md` open question 1) via corpus case 16;
-  .ntb color byte order + edit-op semantics (open questions 4–6) via a
-  red-ink / erase-and-redraw corpus case.
-- **Native-format writers**, each gated by `docs/validated-writes.md`
-  (`validated = False` → `--experimental` until an app-open check is
-  recorded): xopp is done; reMarkable via `rmscene`
-  `write_blocks`/drawj2d; a Notability writer is a candidate per the
-  svg2notability precedent (`docs/formats/notability.md`).
-- **PDF fidelity**: pikepdf `/BM /Darken` exact-blend pass (replacing the
-  underlay-pass approximation, see `docs/ir.md` Appearance semantics) and
-  a filled-outline PDF strategy for variable-width strokes (currently
-  approximated with piecewise-constant runs, see
-  `docs/formats/remarkable.md`).
-- **Annotated-PDF base-page merge** (carried over from Phase 1's known
-  gaps): pikepdf overlay of rendered annotations onto the imported base
-  page.
-- **New formats**: OneNote (MS-ISF decode, or Graph API
-  `?includeinkML=true` per `docs/research.md`), Apple Notes, Samsung
-  `.sdocx`, Boox.
+## M2 — complete in/out push  ✅ LARGELY DONE (2026-07-09)
+
+Landed on the note-apps workstream (18 readers / 12 writers total):
+
+- **Native writers, all five** (each `validated = False` behind
+  `--experimental` per `docs/validated-writes.md`, awaiting app-open
+  checks — samples staged in `corpus/validate/`): Saber, reMarkable
+  `.rm`/`.rmdoc` (int-exact device-fixture round-trips), Supernote
+  (raster RATTA_RLE, cross-validated via supernotelib), GoodNotes
+  (protobuf/LZ4/tpl encoders), Notability `.ntb` (hand-rolled
+  FlatBuffers builder).
+- **New readers**: Excalidraw (r/w), generic SVG (re-ingests our own
+  SVG output — SVG is now two-way) + Stylus Labs Write, Wacom UIM
+  3.0/3.1 (oracle-validated vs Wacom's Apache library), MS-ISF
+  (codec-exact vs Microsoft's WPF implementation), **OneNote `.one`**
+  (full classic ONESTORE parse + undocumented ink hierarchy), Samsung
+  `.sdocx`, Onyx Boox `.note`, **PencilKit `.pkdrawing`** (own novel
+  RE, oracle-validated — the Apple Notes ink core), tldraw `.tldr`.
+- Per-format specs in `docs/formats/` with confidence markers.
+
+Still open in M2 scope:
+- **Writer validation session** (app-open checks → flip `validated`);
+  Notability additionally gated on the red-ink color-byte-order corpus
+  case; GoodNotes on Mac-import member-set iteration.
+- **GoodNotes/Notability corpus deepening**: pen-type/pressure fields
+  (cases 05/07/14/16), `curvesfractionalwidths` (case 16).
+- **Apple Notes NoteStore plumbing** (TCC-gated) on top of the
+  PencilKit decoder; **rnote** (needs drawn samples).
+- **PDF fidelity** (`/BM /Darken` exact blend; filled-outline
+  variable-width strokes) and **annotated-PDF base-page merge** —
+  carried over, unchanged.
 
 ## Phase 2 — macOS menu-bar app  ◻ NOT STARTED
 SwiftUI `MenuBarExtra` shell that supervises a bundled `inkterop watch`

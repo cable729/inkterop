@@ -37,6 +37,7 @@ def _load() -> None:
     from .svg import SvgReader, WriteReader
     from .uim import UimReader
     from .supernote import SupernoteReader, SupernoteWriter
+    from .tldraw import TldrawReader
     from .xopp import XoppReader, XoppWriter
 
     _READERS.extend([
@@ -46,7 +47,7 @@ def _load() -> None:
         ExcalidrawReader(),
         # WriteReader before SvgReader: both claim .svg, first detect() wins
         WriteReader(), SvgReader(), UimReader(), IsfReader(),
-        SdocxReader(), OneNoteReader(), PkDrawingReader(),
+        SdocxReader(), OneNoteReader(), PkDrawingReader(), TldrawReader(),
     ])
     _WRITERS.extend([
         PdfWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(), SvgWriter(),

@@ -1,0 +1,224 @@
+{
+  "tldrawFileFormatVersion": 1,
+  "schema": {
+    "schemaVersion": 2,
+    "sequences": {}
+  },
+  "records": [
+    {
+      "gridSize": 10,
+      "name": "",
+      "meta": {},
+      "id": "document:document",
+      "typeName": "document"
+    },
+    {
+      "meta": {},
+      "id": "page:page1",
+      "name": "Page 1",
+      "index": "a1",
+      "typeName": "page"
+    },
+    {
+      "meta": {},
+      "id": "page:page2",
+      "name": "Page 2",
+      "index": "a2",
+      "typeName": "page"
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "z": 1,
+      "meta": {},
+      "id": "camera:page:page1",
+      "typeName": "camera"
+    },
+    {
+      "x": 100,
+      "y": 100,
+      "rotation": 0,
+      "isLocked": false,
+      "opacity": 1,
+      "meta": {},
+      "id": "shape:draw-pen",
+      "type": "draw",
+      "parentId": "page:page1",
+      "index": "a1",
+      "props": {
+        "segments": [
+          {
+            "type": "free",
+            "points": [
+              {"x": 0, "y": 0, "z": 0.2},
+              {"x": 20, "y": 10, "z": 0.4},
+              {"x": 40, "y": 0, "z": 0.6},
+              {"x": 60, "y": 10, "z": 0.8},
+              {"x": 80, "y": 0, "z": 1.0}
+            ]
+          }
+        ],
+        "color": "red",
+        "fill": "none",
+        "dash": "draw",
+        "size": "m",
+        "isComplete": true,
+        "isClosed": false,
+        "isPen": true,
+        "scale": 1
+      },
+      "typeName": "shape"
+    },
+    {
+      "x": 200,
+      "y": 200,
+      "rotation": 0,
+      "isLocked": false,
+      "opacity": 1,
+      "meta": {},
+      "id": "shape:draw-straight",
+      "type": "draw",
+      "parentId": "page:page1",
+      "index": "a2",
+      "props": {
+        "segments": [
+          {
+            "type": "straight",
+            "points": [
+              {"x": 0, "y": 0, "z": 0.5},
+              {"x": 100, "y": 0, "z": 0.5}
+            ]
+          }
+        ],
+        "color": "black",
+        "fill": "none",
+        "dash": "draw",
+        "size": "s",
+        "isComplete": true,
+        "isClosed": false,
+        "isPen": false,
+        "scale": 1
+      },
+      "typeName": "shape"
+    },
+    {
+      "x": 95,
+      "y": 95,
+      "rotation": 0,
+      "isLocked": false,
+      "opacity": 1,
+      "meta": {},
+      "id": "shape:highlight1",
+      "type": "highlight",
+      "parentId": "page:page1",
+      "index": "a3",
+      "props": {
+        "segments": [
+          {
+            "type": "free",
+            "points": [
+              {"x": 0, "y": 0, "z": 0.5},
+              {"x": 30, "y": 2, "z": 0.5},
+              {"x": 60, "y": 0, "z": 0.5}
+            ]
+          }
+        ],
+        "color": "yellow",
+        "size": "l",
+        "isComplete": true,
+        "isPen": false,
+        "scale": 1
+      },
+      "typeName": "shape"
+    },
+    {
+      "x": 120,
+      "y": 260,
+      "rotation": 0,
+      "isLocked": false,
+      "opacity": 1,
+      "meta": {},
+      "id": "shape:text1",
+      "type": "text",
+      "parentId": "page:page1",
+      "index": "a4",
+      "props": {
+        "color": "blue",
+        "size": "m",
+        "w": 200,
+        "font": "draw",
+        "textAlign": "start",
+        "autoSize": true,
+        "scale": 1,
+        "richText": {
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {"type": "text", "text": "hello tldraw"}
+              ]
+            }
+          ]
+        }
+      },
+      "typeName": "shape"
+    },
+    {
+      "x": 300,
+      "y": 300,
+      "rotation": 0,
+      "isLocked": false,
+      "opacity": 1,
+      "meta": {},
+      "id": "shape:geo1",
+      "type": "geo",
+      "parentId": "page:page1",
+      "index": "a5",
+      "props": {
+        "geo": "rectangle",
+        "w": 80,
+        "h": 60,
+        "color": "green",
+        "fill": "none",
+        "dash": "draw",
+        "size": "m",
+        "scale": 1
+      },
+      "typeName": "shape"
+    },
+    {
+      "x": 50,
+      "y": 50,
+      "rotation": 0,
+      "isLocked": false,
+      "opacity": 1,
+      "meta": {},
+      "id": "shape:draw-p2",
+      "type": "draw",
+      "parentId": "page:page2",
+      "index": "a1",
+      "props": {
+        "segments": [
+          {
+            "type": "free",
+            "points": [
+              {"x": 0, "y": 0, "z": 0.5},
+              {"x": 40, "y": 40, "z": 0.5},
+              {"x": 80, "y": 0, "z": 0.5}
+            ]
+          }
+        ],
+        "color": "light-blue",
+        "fill": "none",
+        "dash": "draw",
+        "size": "xl",
+        "isComplete": true,
+        "isClosed": false,
+        "isPen": false,
+        "scale": 1
+      },
+      "typeName": "shape"
+    }
+  ]
+}
