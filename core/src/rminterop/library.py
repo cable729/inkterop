@@ -51,6 +51,7 @@ class Document:
     file_type: str = ""  # notebook | pdf | epub (documents only)
     orientation: str = "portrait"
     page_uuids: list[str] = field(default_factory=list)
+    page_templates: list[str] = field(default_factory=list)
     dir: Path | None = None
 
     @property
@@ -97,7 +98,7 @@ class Library:
                     content = {}
                 doc.file_type = content.get("fileType", "notebook")
                 doc.orientation = content.get("orientation", "portrait")
-                doc.page_uuids = _page_uuids(content)
+                doc.page_uuids, doc.page_templates = _pages(content)
                 doc.dir = self.cache_dir / uuid
             self.docs[uuid] = doc
 
@@ -141,14 +142,13 @@ class Library:
         return False
 
 
-def _page_uuids(content: dict) -> list[str]:
+def _pages(content: dict) -> tuple[list[str], list[str]]:
     if "cPages" in content:  # 3.x format
-        return [
-            p["id"]
-            for p in content["cPages"].get("pages", [])
-            if "deleted" not in p
-        ]
-    return content.get("pages", [])
+        pages = [p for p in content["cPages"].get("pages", []) if "deleted" not in p]
+        return ([p["id"] for p in pages],
+                [p.get("template", {}).get("value", "") for p in pages])
+    uuids = content.get("pages", [])
+    return uuids, [""] * len(uuids)
 
 
 def _sanitize(name: str) -> str:

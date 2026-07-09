@@ -70,7 +70,7 @@ def mirror_once(cfg: Config | None = None, cache_dir: Path | None = None) -> dic
         tmp = out_pdf.with_name(out_pdf.name + ".rminterop-tmp")
         try:
             render_notebook(pages, tmp, doc.orientation == "landscape",
-                            cfg.render_config())
+                            cfg.render_config(), templates=doc.page_templates)
             tmp.replace(out_pdf)
             state[doc.uuid] = doc.last_modified
             rendered += 1

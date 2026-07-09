@@ -61,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         out = args.out or Path(f"{doc.name}.pdf")
         pages = [doc.dir / f"{u}.rm" for u in doc.page_uuids]
         render_notebook(pages, out, doc.orientation == "landscape",
-                        cfg.render_config())
+                        cfg.render_config(), templates=doc.page_templates)
         print(out)
         return 0
 
