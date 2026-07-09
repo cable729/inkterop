@@ -65,6 +65,7 @@ plugins:
 
 exclude_docs: |
   HANDOFF.md
+  HANDOFF-note-apps.md
 
 nav:
   - Home: index.md

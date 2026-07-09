@@ -8,7 +8,7 @@ reader docstring) and verified empirically against the three public
 twangodev/sdocx samples (corpus-gated; the repo is GPL but its samples
 are study data only — never read its code, never commit the samples).
 
-**No first-party corpus** — Caleb has no Samsung device/app, so nothing
+**No first-party corpus** — no Samsung device/app is available to the project, so nothing
 here has been checked against Samsung Notes itself. `[verified]` below
 means "consistent with the MIT reference implementation AND the three
 corpus samples"; upgrades to app-verified are **hardware-deferred**
