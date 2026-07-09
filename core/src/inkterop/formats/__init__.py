@@ -29,7 +29,7 @@ def _load() -> None:
     from .remarkable.reader import RemarkableReader
     from .remarkable.writer import RemarkablePageWriter, RmdocWriter
     from .saber import SaberReader, SaberWriter
-    from .supernote import SupernoteReader
+    from .supernote import SupernoteReader, SupernoteWriter
     from .xopp import XoppReader, XoppWriter
 
     _READERS.extend([
@@ -40,7 +40,7 @@ def _load() -> None:
     _WRITERS.extend([
         PdfWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(), SvgWriter(),
         SaberWriter(), ExcalidrawWriter(),
-        RemarkablePageWriter(), RmdocWriter(),
+        RemarkablePageWriter(), RmdocWriter(), SupernoteWriter(),
     ])
 
 

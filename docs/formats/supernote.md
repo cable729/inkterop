@@ -105,6 +105,20 @@ blank PDF pages. The smoke test asserts document structure and that the
 PDF pipeline doesn't reject the document; raster drawing support in the
 renderer is the follow-up needed for visible output.
 
+## Writer (raster MAINLAYER, 2026-07-09)
+
+`formats/supernote/writer.py` — the fixture generator's container
+machinery promoted to product code (fixtures regenerate byte-identical).
+IR strokes rasterize via Pillow onto the 1404x1872 canvas (fit-contain,
+centered; landscape by aspect) using `render/primitives.py:stroke_runs`,
+quantized to the four X-series RLE codes (luminance-over-white
+thresholds 64/140/217), underlay strokes first. `Layer.raster` PNGs
+(supernote round-trips) composite directly. TOTALPATH stays undecoded so
+no vector data is written — output ink is bitmap-terminal; NativeTool
+does not round-trip; RAW raises. Cross-implementation check: our reader
+parses the output via supernotelib. `validated=False` until a real
+device / Partner app opens one.
+
 ## Attribution
 
 Container reverse-engineering and all decoding come from

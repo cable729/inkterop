@@ -235,6 +235,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "pikepdf" },
+    { name = "pillow" },
     { name = "reportlab" },
     { name = "rmscene" },
     { name = "supernotelib" },
@@ -254,6 +255,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "pikepdf", specifier = ">=9.0" },
+    { name = "pillow", specifier = ">=10" },
     { name = "reportlab", specifier = ">=4.0" },
     { name = "rmscene", specifier = ">=0.8.0" },
     { name = "supernotelib", specifier = ">=0.7.1" },

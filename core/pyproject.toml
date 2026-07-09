@@ -13,6 +13,7 @@ dependencies = [
     "reportlab>=4.0",
     "watchdog>=4.0",
     "supernotelib>=0.7.1",
+    "pillow>=10",
 ]
 
 [project.scripts]
