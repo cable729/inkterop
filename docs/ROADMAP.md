@@ -111,8 +111,9 @@ rmapi read-only pull as the library source.)
 - `inkterop send --editable` via drawj2d 1.4+ (PDF/SVG → .rmdoc native
   editable ink, full Paper Pro color).
 - iPad app trial order (rationale in `docs/research.md`): 1. Saber (only
-  open-format iPad app; verify writing feel), 2. Nebo (best feel; one-way
-  SVG out), 3. OneNote (best automation: Graph API `?includeinkML=true`).
+  open-format iPad app; verify writing feel), 2. Nebo (best feel; no
+  longer one-way — .nebo BINK ink is now decoded, `formats/nebo/`),
+  3. OneNote (best automation: Graph API `?includeinkML=true`).
   GoodNotes/Notability rejected — closed/uncracked (GoodNotes) or format
   being replaced mid-crack (Notability).
 - Stretch: Saber `.sbn2` ↔ `.rm` bidirectional bridge (both formats open).

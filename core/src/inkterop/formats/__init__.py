@@ -23,6 +23,7 @@ def _load() -> None:
     from .goodnotes import GoodnotesReader
     from .inkml import InkmlReader, InkmlWriter
     from .irjson import IrJsonReader, IrJsonWriter
+    from .nebo import NeboReader
     from .notability import NotabilityReader, NtbReader
     from .remarkable.reader import RemarkableReader
     from .saber import SaberReader
@@ -32,7 +33,7 @@ def _load() -> None:
     _READERS.extend([
         RemarkableReader(), IrJsonReader(), XoppReader(), InkmlReader(),
         GoodnotesReader(), SupernoteReader(), NotabilityReader(),
-        NtbReader(), SaberReader(),
+        NtbReader(), SaberReader(), NeboReader(),
     ])
     _WRITERS.extend([
         PdfWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(), SvgWriter(),

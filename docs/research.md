@@ -63,9 +63,12 @@ are as of that date.
   on iOS; open documented formats (.sbn2 BSON, .sba zip); WebDAV/Nextcloud
   sync. The only candidate open on both ends. UNKNOWN: writing feel — test
   before committing.
-- **Nebo/MyScript** — best handwriting feel + HWR; exports SVG; but .nebo
-  un-reversed, JIIX (open JSON ink) only in their SDK, no automation hooks.
-  One-way street: Nebo SVG → drawj2d → editable rM ink works.
+- **Nebo/MyScript** — best handwriting feel + HWR; exports SVG; JIIX
+  (open JSON ink) only in their SDK, no automation hooks. *Update
+  2026-07-09: .nebo is no longer un-reversed — this repo decoded the
+  BINK v5 ink codec (`docs/formats/nebo.md`, `formats/nebo/reader.py`),
+  so .nebo now reads directly into the IR with centerline + per-stroke
+  timestamps instead of going through lossy SVG outlines.*
 - **OneNote** — most extractable mainstream app: MS-ONE/ONESTORE documented,
   ink is ISF (decoded by `msiemens/onenote.rs`), and **Microsoft Graph
   returns page ink as InkML** (`GET .../pages/{id}/content?includeinkML=true`).
