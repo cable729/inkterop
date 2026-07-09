@@ -1,4 +1,4 @@
-"""rminterop CLI: mirror | watch | render | ls"""
+"""rminterop CLI: mirror | watch | render | ls | convert | inspect"""
 
 from __future__ import annotations
 
@@ -22,6 +22,22 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("name", help="document name or uuid")
     r.add_argument("out", type=Path, nargs="?", help="output PDF path")
     sub.add_parser("ls", help="list library documents")
+    c = sub.add_parser("convert", help="convert between note/display formats")
+    c.add_argument("input", help="input file, or library document name/uuid")
+    c.add_argument("output", type=Path, help="output file (format by extension)")
+    c.add_argument("--fidelity", choices=["exact", "native", "raw"],
+                   default="exact",
+                   help="exact: source app's look; native: target restyles "
+                        "semantically; raw: per-point pen data")
+    c.add_argument("--pages", help="page selection, e.g. 1-3,7")
+    c.add_argument("--experimental", action="store_true",
+                   help="allow writers not yet validated against their app")
+    c.add_argument("--force", action="store_true",
+                   help="skip output-path safety checks")
+    i = sub.add_parser("inspect", help="summarize a note file's parsed content")
+    i.add_argument("input", help="input file, or library document name/uuid")
+    i.add_argument("--json", action="store_true", dest="as_json",
+                   help="dump the full IR as JSON to stdout")
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING,
@@ -41,6 +57,52 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "watch":
         from .mirror import watch
         watch(cfg, args.cache_dir, args.debounce)
+        return 0
+
+    if args.cmd == "convert":
+        from .convert import ConvertError, convert
+        from .formats.base import Fidelity
+        try:
+            convert(Path(args.input), args.output,
+                    fidelity=Fidelity(args.fidelity), pages=args.pages,
+                    experimental=args.experimental, force=args.force,
+                    cache_dir=args.cache_dir)
+        except ConvertError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        print(args.output)
+        return 0
+
+    if args.cmd == "inspect":
+        from .convert import ConvertError, read_input
+        try:
+            doc = read_input(Path(args.input), cache_dir=args.cache_dir)
+        except ConvertError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        if args.as_json:
+            from .ir import serialize
+            print(serialize.dumps(doc, indent=2))
+            return 0
+        print(f"{doc.title or args.input}  [{doc.format_id}, "
+              f"{doc.orientation}, {len(doc.pages)}p]")
+        for n, page in enumerate(doc.pages, 1):
+            strokes = list(page.strokes())
+            tools: dict[str, int] = {}
+            channels: set[str] = set()
+            points = 0
+            for s in strokes:
+                tools[s.tool.family.value] = tools.get(s.tool.family.value, 0) + 1
+                channels.update(ch.value for ch in s.channels)
+                points += len(s)
+            b = page.bounds
+            bg = type(page.background).__name__ if page.background else "none"
+            tstr = ", ".join(f"{k}x{v}" for k, v in sorted(tools.items())) or "empty"
+            print(f"  p{n}: {len(strokes)} strokes ({tstr}), {points} pts, "
+                  f"bounds [{b.x_min:.0f},{b.y_min:.0f}..{b.x_max:.0f},"
+                  f"{b.y_max:.0f}], bg={bg}")
+            if channels:
+                print(f"      channels: {', '.join(sorted(channels))}")
         return 0
 
     from .library import Library
