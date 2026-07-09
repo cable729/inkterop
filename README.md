@@ -1,5 +1,11 @@
 # inkterop
 
+[![CI](https://github.com/cable729/inkterop/actions/workflows/ci.yml/badge.svg)](https://github.com/cable729/inkterop/actions/workflows/ci.yml)
+[![Docs](https://github.com/cable729/inkterop/actions/workflows/docs.yml/badge.svg)](https://cable729.github.io/inkterop/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**Documentation: [cable729.github.io/inkterop](https://cable729.github.io/inkterop/)**
+
 A universal converter between handwritten-note formats — e-ink devices,
 note apps, and display formats — plus the reMarkable → PDF mirror it grew
 out of.
