@@ -25,8 +25,11 @@ points: [{x, y, z}, ...]}` with points relative to the origin and
 `props.text` or ProseMirror-style `props.richText`.
 
 Palette-token hex values and the size->px / font-size tables below are
-[inferred] from public docs/default-theme references — verifiable
-in-browser at tldraw.com later. "geo"/"line"/"arrow"/other shapes are
+[verified 2026-07-09] against the published tldraw 3.13.1 npm packages
+at runtime (palette/size exports read in-browser; ink thickness
+measured on a mounted editor's getSvgString output — observation of
+released artifacts, no source read; method + numbers in
+docs/formats/tldraw.md). "geo"/"line"/"arrow"/other shapes are
 skipped (kept-small decision; see docs/formats/tldraw.md). Coordinates
 are CSS px on an infinite y-down canvas (`point_scale = 0.75`);
 per-page content-bbox bounds like the excalidraw reader.
@@ -49,7 +52,10 @@ _logger = logging.getLogger(__name__)
 FORMAT_ID = "tldraw"
 PX_SCALE = 0.75  # CSS px -> pt
 
-# Default-theme (light mode) solid colors [inferred — verify in-browser].
+# Default-theme (light mode) solid colors [verified 2026-07-09 against
+# the published @tldraw/tlschema 3.13.1 package's runtime
+# DefaultColorThemePalette export — observation of the released
+# artifact, no source read].
 _PALETTE = {
     "black": "#1d1d1d",
     "grey": "#9fa8b2",
@@ -65,16 +71,54 @@ _PALETTE = {
     "red": "#e03131",
     "white": "#ffffff",
 }
-# size token -> stroke width px [inferred from docs].
+# Highlighter swatches (srgb) — the app draws "highlight" shapes with
+# these, NOT the solid colors [verified, same palette export].
+_HIGHLIGHT_PALETTE = {
+    "black": "#fddd00",
+    "grey": "#cbe7f1",
+    "light-violet": "#ff88ff",
+    "violet": "#c77cff",
+    "blue": "#10acff",
+    "light-blue": "#00f4ff",
+    "yellow": "#fddd00",
+    "orange": "#ffa500",
+    "green": "#00ffc8",
+    "light-green": "#65f641",
+    "light-red": "#ff7fa3",
+    "red": "#ff636e",
+    "white": "#ffffff",
+}
+# size token -> strokeWidth px [verified: tldraw 3.13.1 STROKE_SIZES].
 _STROKE_SIZES = {"s": 2.0, "m": 3.5, "l": 5.0, "xl": 10.0}
-# size token -> text font size px [inferred].
+# size token -> text font size px [verified: tldraw 3.13.1 FONT_SIZES].
 _FONT_SIZES = {"s": 18.0, "m": 24.0, "l": 36.0, "xl": 44.0}
+
+# Rendered ink thickness is NOT the STROKE_SIZES value. Measured on a
+# mounted tldraw 3.13.1 editor via getSvgString probes (straight
+# horizontal strokes; see docs/formats/tldraw.md):
+#   draw, z=0.5 (neutral):  thickness = 1.374*STROKE_SIZES + 2.52
+#     (5.27 / 7.33 / 9.39 / 16.26 px for s/m/l/xl — exact fit)
+#   draw, z=1.0: 1.503x the neutral thickness (linear interp assumed
+#     between measurements; below z=0.5 extrapolated [inferred])
+#   highlight: thickness = 1.12 * FONT_SIZES (20.16/26.88/40.32/49.28),
+#     drawn as two stacked passes opacity 0.35 + 0.82 of the highlight
+#     swatch => combined coverage ~0.883.
+_DRAW_WIDTH_SLOPE = 1.374
+_DRAW_WIDTH_BASE = 2.52
+_HIGHLIGHT_WIDTH_FACTOR = 1.12
+_HIGHLIGHT_OPACITY = 0.883
+
+
+def _draw_width(size_px: float, z: float) -> float:
+    base = _DRAW_WIDTH_SLOPE * size_px + _DRAW_WIDTH_BASE
+    return base * (1.0 + 1.006 * (z - 0.5))
 
 _INK_TYPES = ("draw", "highlight")
 
 
-def _color(token: str | None) -> ir.Color:
-    s = _PALETTE.get(str(token or "black"), _PALETTE["black"]).lstrip("#")
+def _color(token: str | None, highlight: bool = False) -> ir.Color:
+    pal = _HIGHLIGHT_PALETTE if highlight else _PALETTE
+    s = pal.get(str(token or "black"), pal["black"]).lstrip("#")
     return ir.Color(*(int(s[i:i + 2], 16) / 255.0 for i in (0, 2, 4)))
 
 
@@ -126,17 +170,31 @@ def _ink_stroke(rec: dict) -> ir.Stroke | None:
         return None
     kind = rec.get("type")
     is_highlight = kind == "highlight"
-    color = _color(props.get("color"))
     scale = float(props.get("scale") or 1.0)
-    width = _STROKE_SIZES.get(str(props.get("size", "m")), 3.5) * scale
+    size_px = _STROKE_SIZES.get(str(props.get("size", "m")), 3.5)
     opacity = float(rec.get("opacity", 1.0))
     is_pen = bool(props.get("isPen"))
-
-    channels: dict = {ir.Channel.WIDTH: [width] * len(xs)}
     # z is always stored but is a constant 0.5 placeholder without a
-    # stylus; only carry it as PRESSURE when it is real signal.
-    if is_pen or any(z != 0.5 for z in zs):
+    # stylus; it is only real signal on pen input.
+    real_pressure = is_pen or any(z != 0.5 for z in zs)
+
+    if is_highlight:
+        # the app draws highlights with the highlight swatch at a fat
+        # FONT_SIZES-derived width (measured — see module docstring)
+        color = _color(props.get("color"), highlight=True)
+        widths = [_HIGHLIGHT_WIDTH_FACTOR
+                  * _FONT_SIZES.get(str(props.get("size", "m")), 24.0)
+                  * scale] * len(xs)
+        opacity *= _HIGHLIGHT_OPACITY
+    else:
+        color = _color(props.get("color"))
+        widths = [_draw_width(size_px, z if real_pressure else 0.5) * scale
+                  for z in zs]
+
+    channels: dict = {ir.Channel.WIDTH: widths}
+    if real_pressure:
         channels[ir.Channel.PRESSURE] = zs
+    variable = max(widths) - min(widths) > 1e-9
 
     return ir.Stroke(
         x=xs, y=ys,
@@ -153,8 +211,10 @@ def _ink_stroke(rec: dict) -> ir.Stroke | None:
         color=color,
         channels=channels,
         appearance=ir.StrokeAppearance(
-            mode=ir.GeometryMode.STROKED_CONSTANT,
-            width=width, color=color, opacity=opacity,
+            mode=(ir.GeometryMode.STROKED_VARIABLE if variable
+                  else ir.GeometryMode.STROKED_CONSTANT),
+            width=None if variable else widths[0],
+            color=color, opacity=opacity,
             cap=ir.LineCap.ROUND,
             underlay=is_highlight,
             blend=(ir.BlendMode.DARKEN if is_highlight

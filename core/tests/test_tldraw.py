@@ -51,7 +51,11 @@ def test_read_fixture():
     assert pen.y == pytest.approx([100, 110, 100, 110, 100])
     assert pen.channels[ir.Channel.PRESSURE] == pytest.approx(
         [0.2, 0.4, 0.6, 0.8, 1.0])  # z -> PRESSURE
-    assert pen.appearance.width == pytest.approx(3.5)  # size "m"
+    # size "m": rendered width follows the measured law
+    # 1.374*3.5 + 2.52 = 7.329 at z=0.5, scaled per point by pressure
+    assert pen.appearance.mode is ir.GeometryMode.STROKED_VARIABLE
+    widths = pen.channels[ir.Channel.WIDTH]
+    assert widths[2] == pytest.approx(7.329 * (1 + 1.006 * 0.1), rel=1e-3)
     assert pen.color.r == pytest.approx(0xE0 / 255)  # "red" #e03131
     assert pen.color.g == pytest.approx(0x31 / 255)
 
@@ -59,14 +63,19 @@ def test_read_fixture():
     # constant z=0.5 without isPen is a placeholder, not pressure
     assert ir.Channel.PRESSURE not in straight.channels
     assert straight.x == pytest.approx([200, 300])
-    assert straight.appearance.width == pytest.approx(2.0)  # size "s"
+    # size "s": 1.374*2 + 2.52 = 5.268 rendered
+    assert straight.appearance.width == pytest.approx(5.268)
     assert straight.color.r == pytest.approx(0x1D / 255)  # "black" #1d1d1d
 
     hl = p1[2]
     assert hl.tool.family is ir.ToolFamily.HIGHLIGHTER
     assert hl.appearance.underlay
     assert hl.appearance.blend is ir.BlendMode.DARKEN
-    assert hl.appearance.width == pytest.approx(5.0)  # size "l"
+    # size "l" highlight: 1.12 * FONT_SIZES[l]=36 -> 40.32 px, drawn in
+    # the highlight swatch (yellow -> #fddd00), combined opacity ~0.883
+    assert hl.appearance.width == pytest.approx(40.32)
+    assert hl.appearance.opacity == pytest.approx(0.883)
+    assert hl.color.g == pytest.approx(0xDD / 255)
 
     texts = doc.pages[0].layers[0].texts
     assert len(texts) == 1
@@ -77,7 +86,8 @@ def test_read_fixture():
     # Page 2: one xl draw stroke.
     p2 = list(doc.pages[1].strokes())
     assert len(p2) == 1
-    assert p2[0].appearance.width == pytest.approx(10.0)  # size "xl"
+    # size "xl": 1.374*10 + 2.52 = 16.26 rendered
+    assert p2[0].appearance.width == pytest.approx(16.26)
     assert p2[0].x == pytest.approx([50, 90, 130])
 
     # content-bbox bounds contain everything on each page

@@ -6,9 +6,12 @@ JSON save file of the tldraw whiteboard (tldraw.com / the tldraw SDK).
 License caution: tldraw's source is under a custom source-visible
 license, so — like the GoodNotes/goodparse boundary — this reader was
 built **only** from the public tldraw.dev docs pages plus hand-authored
-sample files. No tldraw source code was read. Field facts are
-`[inferred]` from docs until re-verified by loading fixtures at
-tldraw.com.
+sample files. No tldraw source code was read. Palette / size / rendered
+ink-thickness facts were upgraded to `[verified]` on 2026-07-09 by
+**runtime observation of the released npm packages** (reading exported
+constants and measuring a mounted editor's `getSvgString` output in a
+browser — the devtools-on-tldraw.com method, applied to the SDK), which
+stays on the safe side of the source-visible boundary.
 
 ## Container
 
@@ -42,22 +45,49 @@ owning page). Page records carry `name` and a fractional-indexing
   `props.isPen` marks real stylus input.
 - `props.color`: palette token (black/grey/light-violet/violet/blue/
   light-blue/yellow/orange/green/light-green/light-red/red/white).
-- `props.size`: width token — s=2, m=3.5, l=5, xl=10 px `[inferred]`,
-  multiplied by `props.scale`.
+- `props.size`: width token — `STROKE_SIZES` s=2, m=3.5, l=5, xl=10
+  `[verified: tldraw 3.13.1 runtime export]`, multiplied by
+  `props.scale`. **This is not the rendered thickness** — see below.
 - `props.isClosed` closes the polyline; `props.isComplete` marks the
   stroke finished (ignored — incomplete strokes still render).
 
 `"text"` shapes carry `props.text` (older) or ProseMirror-style
 `props.richText` (`doc` → `paragraph` → `text` nodes); both are read,
 rich text flattened to plain text with paragraph newlines. Font size
-tokens: s=18, m=24, l=36, xl=44 px `[inferred]`.
+tokens: s=18, m=24, l=36, xl=44 px `[verified: FONT_SIZES export]`.
 
-Palette hex values used (default light theme, `[inferred]` from public
-default-theme references — verifiable in-browser): black `#1d1d1d`,
-grey `#9fa8b2`, light-violet `#e085f4`, violet `#ae3ec9`, blue
-`#4465e9`, light-blue `#4ba1f1`, yellow `#f1ac4b`, orange `#e16919`,
-green `#099268`, light-green `#4cb05e`, light-red `#f87777`, red
-`#e03131`, white `#ffffff`.
+Palette hex values (default light theme) `[verified 2026-07-09 against
+@tldraw/tlschema 3.13.1's runtime DefaultColorThemePalette export]`:
+black `#1d1d1d`, grey `#9fa8b2`, light-violet `#e085f4`, violet
+`#ae3ec9`, blue `#4465e9`, light-blue `#4ba1f1`, yellow `#f1ac4b`,
+orange `#e16919`, green `#099268`, light-green `#4cb05e`, light-red
+`#f87777`, red `#e03131`, white `#ffffff`.
+
+Highlight shapes use the theme's **highlight swatches**, not the solid
+colors `[verified, same export]` (srgb): black/yellow `#fddd00`, grey
+`#cbe7f1`, light-violet `#ff88ff`, violet `#c77cff`, blue `#10acff`,
+light-blue `#00f4ff`, orange `#ffa500`, green `#00ffc8`, light-green
+`#65f641`, light-red `#ff7fa3`, red `#ff636e`, white `#ffffff`.
+
+## Rendered ink thickness `[verified]`
+
+Measured 2026-07-09 on a mounted tldraw 3.13.1 editor via
+`getSvgString` probes (straight horizontal strokes, constant z):
+
+- **draw**, z=0.5 (neutral): `thickness = 1.374 × STROKE_SIZES + 2.52`
+  — 5.27 / 7.33 / 9.39 / 16.26 px for s/m/l/xl (exact affine fit).
+  At z=1.0 the thickness is 1.503× neutral; the reader interpolates
+  linearly per point (`1 + 1.006·(z − 0.5)`; below z=0.5 this is an
+  extrapolation `[inferred]`). Constant-z strokes export as a stroked
+  centerline path; varying-z as a filled outline.
+  `isPen: false` (simulated pressure) measured 6.01 px for size m on a
+  uniform-speed probe — speed-dependent; the reader uses the neutral
+  law `[inferred]`.
+- **highlight**: `thickness = 1.12 × FONT_SIZES` — 20.16 / 26.88 /
+  40.32 / 49.28 px for s/m/l/xl (exact fit; answers old open question
+  "highlighter width multiplier"). Drawn as two stacked passes of the
+  highlight swatch at opacity 0.35 and 0.82 ⇒ combined coverage
+  ≈ 0.883, which the reader uses as the stroke opacity.
 
 ## IR mapping
 
@@ -89,20 +119,16 @@ to tldraw is better served by SVG (tldraw imports SVG/images).
 
 ## Open questions
 
-1. Load the fixture at tldraw.com and draw an app-made sample back —
-   upgrades palette/size/pressure facts to `[verified]` (palette values
-   checkable in-browser via devtools on tldraw.com's own canvas).
-2. Highlighter render width: the app draws highlight strokes much
-   fatter than the size token's draw width `[unknown multiplier]`; we
-   currently reuse the draw width table.
-3. Dedicated highlight swatches: tldraw themes carry a separate
-   `highlight` color per token; we use the solid swatch.
-4. Frame/group children: page resolution walks the parent chain, but
+1. An app-made `.tldr` (drawn at tldraw.com, saved) would confirm the
+   record shapes our hand-authored fixture assumes — the remaining
+   `[inferred]` container facts.
+2. Frame/group children: page resolution walks the parent chain, but
    child coordinates are treated as page-absolute — nested-transform
    accumulation `[unknown]`.
-5. Perfect-freehand outline rendering (tldraw, like Excalidraw, fills
-   an outline polygon); our constant-width stroked appearance is an
-   approximation.
+3. Pressure→thickness below z=0.5 is a linear extrapolation from the
+   z=0.5/z=1.0 measurements; a z<0.5 probe would pin it.
+4. `isPen: false` simulated-pressure thickness is speed-dependent; we
+   use the neutral-z law.
 
 ## Changelog
 
@@ -110,3 +136,9 @@ to tldraw is better served by SVG (tldraw imports SVG/images).
   fixture (`core/tests/fixtures/tldraw/`); reader not yet registered in
   `formats/__init__.py` (workstream rule — registration lines reported
   in the PR).
+- 2026-07-09 (later): palette (incl. highlight swatches), STROKE_SIZES,
+  FONT_SIZES and the rendered-thickness laws verified against the
+  released tldraw 3.13.1 packages at runtime; reader now emits measured
+  rendered widths (was the raw size token — ~2.5× too thin), per-point
+  pressure-scaled widths, highlight swatch colors and ~0.883 combined
+  highlight opacity.
