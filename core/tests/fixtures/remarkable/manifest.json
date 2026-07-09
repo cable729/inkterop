@@ -1,0 +1,90 @@
+{
+  "calligraphy-marker-paintbrush-shader": {
+    "file": "calligraphy-marker-paintbrush-shader.rm",
+    "source_doc": "math notebook A",
+    "doc_uuid": "0cd7b853-fc71-42fe-8611-b80b7cb55bf5",
+    "page_uuid": "67e752d2-d554-480b-9ad1-bcecc741fdd0",
+    "orientation": "portrait",
+    "template": "P Dots S",
+    "why": "math notebook A p1: CALIGRAPHY/MARKER_2/PAINTBRUSH_2/SHADER, BLACK/CYAN/HIGHLIGHT/WHITE",
+    "captured": "2026-07-09",
+    "size": 89639
+  },
+  "fineliner-mechpencil-paintbrush": {
+    "file": "fineliner-mechpencil-paintbrush.rm",
+    "source_doc": "Getting started",
+    "doc_uuid": "25999b23-5c7e-40ec-bf89-bd58289989ec",
+    "page_uuid": "7b23b153-09f2-4f0d-8709-b4e6376f18fa",
+    "orientation": "portrait",
+    "template": "Blank",
+    "why": "Getting started p2: FINELINER_2/MECHANICAL_PENCIL_2/PAINTBRUSH_2, BLACK/CYAN/MAGENTA",
+    "captured": "2026-07-09",
+    "size": 46772
+  },
+  "fineliner-pencil-colors": {
+    "file": "fineliner-pencil-colors.rm",
+    "source_doc": "Getting started",
+    "doc_uuid": "25999b23-5c7e-40ec-bf89-bd58289989ec",
+    "page_uuid": "7ec9af6d-5b06-4d5a-8f15-6380b6365288",
+    "orientation": "portrait",
+    "template": "Blank",
+    "why": "Getting started p10: FINELINER_2/PENCIL_2, BLACK/BLUE/MAGENTA",
+    "captured": "2026-07-09",
+    "size": 11848
+  },
+  "ballpoint-small": {
+    "file": "ballpoint-small.rm",
+    "source_doc": "math notebook B",
+    "doc_uuid": "f3b94973-20ac-4ca5-b4ab-63a529f1a8a1",
+    "page_uuid": "e0d36ab3-3b97-4437-a1ac-3a67928ad72e",
+    "orientation": "portrait",
+    "template": "P Dots S",
+    "why": "math notebook B p13: pure BALLPOINT_2",
+    "captured": "2026-07-09",
+    "size": 27769
+  },
+  "ballpoint-grown-page": {
+    "file": "ballpoint-grown-page.rm",
+    "source_doc": "math notebook B",
+    "doc_uuid": "f3b94973-20ac-4ca5-b4ab-63a529f1a8a1",
+    "page_uuid": "c69afdb9-c59b-42e7-ab6a-c5415acd5b94",
+    "orientation": "portrait",
+    "template": "P Dots S",
+    "why": "math notebook B p12: BALLPOINT_2, grown page ymax~3480 (adjustable page height)",
+    "captured": "2026-07-09",
+    "size": 153690
+  },
+  "landscape-fineliner": {
+    "file": "landscape-fineliner.rm",
+    "source_doc": "math notebook C",
+    "doc_uuid": "15652faf-cefe-4095-b613-c915eeb023d6",
+    "page_uuid": "ccbfd6ae-a8be-46e4-bffc-06804e4de58e",
+    "orientation": "landscape",
+    "template": "P Dots S",
+    "why": "math notebook C p1: landscape FINELINER_2",
+    "captured": "2026-07-09",
+    "size": 10318
+  },
+  "landscape-highlighter": {
+    "file": "landscape-highlighter.rm",
+    "source_doc": "math notebook C",
+    "doc_uuid": "15652faf-cefe-4095-b613-c915eeb023d6",
+    "page_uuid": "fe70b892-a800-41ae-9d94-6e93e909d5a6",
+    "orientation": "landscape",
+    "template": "P Dots S",
+    "why": "math notebook C p12: landscape FINELINER_2/HIGHLIGHTER_2, MAGENTA",
+    "captured": "2026-07-09",
+    "size": 213422
+  },
+  "highlighter-marker-pencil": {
+    "file": "highlighter-marker-pencil.rm",
+    "source_doc": "math notebook D",
+    "doc_uuid": "84ed7bf8-ced0-4139-86fe-d8b33f8a37b4",
+    "page_uuid": "c06f4b4b-08b5-4c86-ae55-6a137710202c",
+    "orientation": "portrait",
+    "template": "P Dots S",
+    "why": "math notebook D p1: FINELINER_2/HIGHLIGHTER_2/MARKER_2/PENCIL_2, GREEN_2/HIGHLIGHT",
+    "captured": "2026-07-09",
+    "size": 141558
+  }
+}
