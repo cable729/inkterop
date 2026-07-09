@@ -19,6 +19,7 @@ from .tools import ToolRef
 
 @dataclass
 class Rect:
+    """Axis-aligned bounding box in source units."""
     x_min: float
     y_min: float
     x_max: float
@@ -35,6 +36,10 @@ class Rect:
 
 @dataclass
 class Stroke:
+    """One pen stroke: parallel x/y point arrays plus optional per-point
+    channels (pressure, tilt, width...), a semantic tool reference, and an
+    optional exact appearance override. See the IR spec for the
+    three-fidelity model."""
     x: list[float]
     y: list[float]
     tool: ToolRef
@@ -58,6 +63,7 @@ class Stroke:
 
 @dataclass
 class TextBlock:
+    """A typed-text run anchored at (x, y) in source units."""
     x: float
     y: float
     text: str
@@ -77,6 +83,8 @@ class RasterImage:
 
 @dataclass
 class Layer:
+    """One z-ordered layer of a page: vector strokes, text, and/or a
+    raster image."""
     strokes: list[Stroke] = field(default_factory=list)
     texts: list[TextBlock] = field(default_factory=list)
     raster: RasterImage | None = None
@@ -100,17 +108,20 @@ class TemplateBackground:
 
 @dataclass
 class PdfBackground:
+    """A page of an attached PDF used as the page background."""
     attachment_key: str  # key into Document.attachments
     page_index: int
 
 
 @dataclass
 class ImageBackground:
+    """A raster image used as the page background."""
     image: RasterImage
 
 
 @dataclass
 class ColorBackground:
+    """A solid-color page background."""
     color: Color
 
 
@@ -119,6 +130,8 @@ Background = TemplateBackground | PdfBackground | ImageBackground | ColorBackgro
 
 @dataclass
 class Page:
+    """One page: bounds + unit scale, layers bottom-to-top, and an
+    optional background."""
     bounds: Rect  # in source units (rM: x centered on 0, grown y)
     point_scale: float  # source units -> PDF points
     layers: list[Layer] = field(default_factory=list)
@@ -133,6 +146,7 @@ class Page:
 
 @dataclass
 class Document:
+    """The root IR object a reader produces and a writer consumes."""
     format_id: str
     title: str = ""
     pages: list[Page] = field(default_factory=list)

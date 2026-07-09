@@ -1,0 +1,89 @@
+site_name: inkterop
+site_description: >-
+  Universal converter between handwritten-note formats — reMarkable,
+  GoodNotes, Notability, Supernote, Saber, Xournal++, InkML, SVG, PDF
+site_url: https://cable729.github.io/inkterop/
+repo_url: https://github.com/cable729/inkterop
+repo_name: cable729/inkterop
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  icon:
+    logo: material/fountain-pen-tip
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [core/src]
+          options:
+            members_order: source
+            show_source: true
+            show_if_no_docstring: false
+            filters: ["!^_"]
+
+exclude_docs: |
+  HANDOFF.md
+
+nav:
+  - Home: index.md
+  - The IR:
+      - Intermediate representation: ir.md
+  - Formats:
+      - reMarkable v6: formats/remarkable.md
+      - GoodNotes 6: formats/goodnotes.md
+      - Notability: formats/notability.md
+      - Supernote: formats/supernote.md
+      - Saber: formats/saber.md
+      - Nebo / MyScript: formats/nebo.md
+      - Xournal++: formats/xopp.md
+      - InkML mapping: formats/inkml-mapping.md
+  - Methodology:
+      - Reverse engineering: reverse-engineering.md
+      - Corpus protocol: corpus-protocol.md
+      - Validated writes: validated-writes.md
+      - Ecosystem survey: research.md
+  - Project:
+      - Roadmap: ROADMAP.md
+  - API reference: api.md

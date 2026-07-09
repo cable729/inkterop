@@ -10,3 +10,4 @@ build/
 corpus/
 *.xcuserdata/
 macos/DerivedData/
+site/

@@ -1,4 +1,4 @@
-# remarkable-interop / inkterop
+# inkterop
 
 A universal converter between handwritten-note formats — e-ink devices,
 note apps, and display formats — plus the reMarkable → PDF mirror it grew
@@ -91,4 +91,5 @@ uv run inkterop --help
 ## License
 
 Code: MIT. Documentation: CC BY 4.0. Self-generated test fixtures: CC0.
+`device-mods/vendor/` is vendored GPL-3.0 (see [NOTICE](NOTICE)).
 Format facts credited to prior work in each format doc.

@@ -1,7 +1,11 @@
 [project]
 name = "inkterop"
 version = "0.1.0"
-description = "Read the reMarkable desktop cache, render faithful PDFs, mirror to iCloud Drive"
+description = "Universal converter between handwritten-note formats: reMarkable, GoodNotes, Notability, Supernote, Saber, Xournal++, InkML, SVG, PDF"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Caleb (cable729)" }]
+keywords = ["remarkable", "goodnotes", "notability", "supernote", "handwriting", "ink", "inkml", "e-ink", "converter"]
 requires-python = ">=3.12"
 dependencies = [
     "rmscene>=0.8.0",
@@ -18,6 +22,10 @@ inkterop = "inkterop.cli:main"
 dev = [
     "hypothesis>=6.156.4",
     "pytest>=8.0",
+]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
 ]
 
 [build-system]
