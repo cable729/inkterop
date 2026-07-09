@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+.DS_Store
+.pytest_cache/
+.ruff_cache/
+corpus/
+*.xcuserdata/
+macos/DerivedData/
