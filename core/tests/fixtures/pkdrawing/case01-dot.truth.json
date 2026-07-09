@@ -1,0 +1,35 @@
+{
+  "strokeCount" : 1,
+  "strokes" : [
+    {
+      "color" : {
+        "a" : 1,
+        "b" : 0,
+        "g" : 0,
+        "r" : 0
+      },
+      "controlPointCount" : 1,
+      "controlPoints" : [
+        {
+          "altitude" : 1.5707963267948966,
+          "azimuth" : -4.7937631091787836e-05,
+          "force" : 0.5,
+          "h" : 5,
+          "opacity" : 0.9999847409781033,
+          "secondaryScale" : 1,
+          "t" : 0,
+          "w" : 5,
+          "x" : 100,
+          "y" : 100
+        }
+      ],
+      "ink" : "com.apple.ink.pen",
+      "renderBounds" : {
+        "h" : 8,
+        "w" : 8,
+        "x" : 96,
+        "y" : 96
+      }
+    }
+  ]
+}
