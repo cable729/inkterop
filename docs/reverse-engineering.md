@@ -100,6 +100,12 @@ Applied, in order, to every new format:
      decoder for Apple's `libcompression` framed LZ4 (frame format is
      public; the decoder is written from that spec, not from any
      existing implementation).
+   - Small-integer u32 at offset 0 followed by even u16 pairs (a
+     root-table offset + vtable)? `tools/re/fbwalk.py` is a schema-less
+     FlatBuffers walker (written from the published FlatBuffers
+     internals doc): it validates tables via their vtables, recurses
+     into strings/vectors/sub-tables, and dumps unknown slots as raw
+     scalars — this is what cracked Notability's `.ntb` noteBundle.
 3. **Known-shape corpus experiments.** Once the container structure is
    legible, the meaning of individual fields is pinned down by writing
    controlled inputs and diffing the output (this is what
