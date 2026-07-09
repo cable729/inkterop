@@ -205,6 +205,38 @@ flattened at 4 samples/segment), per-point widths, colors, tool mapping,
 title, page size, created timestamp. Not yet mapped: text objects, PDF
 backgrounds, images, audio, multi-page/section behavior.
 
+### .ntb writer (experimental, `validated=False`)
+
+`core/src/inkterop/formats/notability/writer.py` +
+`formats/notability/fb.py` (a minimal hand-rolled FlatBuffers builder,
+same internals-doc-only provenance as `fbwalk.py`). The writer is the
+exact inverse of the reader: it emits only the tables/slots the reader
+consumes and mirrors the `scribbles.ntb` fixture byte patterns for
+everything else — container member list/order (stored zip: `version`,
+`noteBundle`, `manifest.json` with appVersion 16.5.3, white placeholder
+`thumbnail.png`), root constants (u16 = 12; opaque 16 bytes written as
+zeros `[unknown]`), the type-1 metadata op (page size from page-0
+bounds, 36 pt margins, `en_US`, Inter/14), the type-3 op (`u32 = 2`),
+and op envelopes with sequence numbers 0, 1, then odd-ascending
+type-15 stroke ops.
+
+Strokes: IR polylines become coord-fmt-1 (f32) point blobs with one
+*exactly linear* cubic per segment (controls at 1/3 and 2/3 of the
+chord), so the reader's uniform flattening reproduces the written
+polyline verbatim; per-anchor pressure profiles ride the f16 width
+multipliers (`exact` fidelity). `native` writes multipliers 1.0 at the
+app's observed default base widths; `raw` raises. Multi-page documents
+write page 1 only with a warning (op-log page framing `[unknown]`).
+
+Validation is **gated on open question #4** (color byte order R vs G):
+RGBA is emitted exactly as the reader interprets it, so in-repo
+round-trips are safe either way, but a red stroke could come out
+blue-channel-swapped in the app until the red corpus case lands — plus
+the usual app-open check per `docs/validated-writes.md`. Precedent
+note: svg2notability demonstrated third-party *writes* Notability
+accepts, but against the **legacy** `Session.plist` format — if .ntb
+app-import fails, a legacy plist writer is the fallback lane.
+
 ## Version detection `[verified on one sample each]`
 
 - Legacy `.note`: zip + `Session.plist` + `$archiver ==
@@ -244,8 +276,9 @@ Modern `.ntb`:
    type-15 op" on edited notes.
 7. Text objects, PDF backgrounds, images, audio in .ntb; multi-page /
    section notes.
-8. Write support: revisit after corpus cases for #4–#6
-   (validated-writes policy applies).
+8. Write support: an experimental writer exists (see ".ntb writer"
+   above) but stays `validated=False` until corpus cases for #4–#6 and
+   an app-open check land (validated-writes policy applies).
 
 ## Changelog
 
@@ -257,3 +290,8 @@ Modern `.ntb`:
   `NtbReader` implemented; render validated against the app's own
   thumbnail; container `notes/<UUID>` blobs confirmed to share the op
   encoding.
+- 2026-07-09 (later still): experimental `.ntb` writer (`NtbWriter`,
+  `validated=False`) + hand-rolled FlatBuffers builder; write→read
+  round-trips (synthetic + fixture) and fbwalk framing checks in
+  `core/tests/test_ntb_writer.py`; validation gated on the color
+  byte-order corpus case (open question #4) and an app-open check.

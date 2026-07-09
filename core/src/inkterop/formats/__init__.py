@@ -25,7 +25,7 @@ def _load() -> None:
     from .inkml import InkmlReader, InkmlWriter
     from .irjson import IrJsonReader, IrJsonWriter
     from .nebo import NeboReader
-    from .notability import NotabilityReader, NtbReader
+    from .notability import NotabilityReader, NtbReader, NtbWriter
     from .remarkable.reader import RemarkableReader
     from .remarkable.writer import RemarkablePageWriter, RmdocWriter
     from .saber import SaberReader, SaberWriter
@@ -45,7 +45,7 @@ def _load() -> None:
         PdfWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(), SvgWriter(),
         SaberWriter(), ExcalidrawWriter(),
         RemarkablePageWriter(), RmdocWriter(), SupernoteWriter(),
-        GoodnotesWriter(),
+        GoodnotesWriter(), NtbWriter(),
     ])
 
 
