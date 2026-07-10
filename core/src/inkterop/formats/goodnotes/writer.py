@@ -53,20 +53,32 @@ from .wire import (
 # widely-observed public-sample version; our reader accepts 24 and 25.
 SCHEMA_VERSION = 24
 
-# Inverse of reader._PEN_TYPE_FAMILY plus the pencil id from the fixture
-# (id 3 = pencil [inferred]); everything else is written as a pressure
-# pen (id 0). NativeTool ids from a GoodNotes source round-trip verbatim.
-FAMILY_PEN_TYPE = {
-    ir.ToolFamily.HIGHLIGHTER: 4,
-    ir.ToolFamily.PENCIL: 3,
-    ir.ToolFamily.MECHANICAL_PENCIL: 3,
+# Pen-style wire encoding (docs/formats/goodnotes.md "Pen style"): stroke
+# field 3 varint (1 = pressure pen, 5 = pencil, omitted = constant-width
+# ball pen), field 5 = 1 for the highlighter, field 20 = {1: ""} for the
+# marker (all other strokes carry field 20 as empty bytes). Symbolic style
+# strings from a GoodNotes-sourced NativeTool round-trip verbatim.
+_STYLE_FIELDS = {  # style -> (field3, field5, is_marker)
+    "highlighter": (0, 1, False),
+    "pencil": (5, 0, False),
+    "ball": (0, 0, False),
+    "marker": (1, 0, True),
+    "pressure": (1, 0, False),
+}
+_FAMILY_STYLE = {
+    ir.ToolFamily.HIGHLIGHTER: "highlighter",
+    ir.ToolFamily.PENCIL: "pencil",
+    ir.ToolFamily.MECHANICAL_PENCIL: "pencil",
+    ir.ToolFamily.BALLPOINT: "ball",
+    ir.ToolFamily.FINELINER: "ball",
+    ir.ToolFamily.MARKER: "marker",
 }
 
 # Constant widths (points) for `native` fidelity, from the app's observed
-# defaults: 24 pt highlighter, 1.56 pt ball pen/pencil.
+# defaults: 24 pt highlighter, 18 pt marker, 1.56 pt ball pen/pencil.
 _FAMILY_DEFAULT_WIDTH = {
     ir.ToolFamily.HIGHLIGHTER: 24.0,
-    ir.ToolFamily.MARKER: 4.0,
+    ir.ToolFamily.MARKER: 18.0,
     ir.ToolFamily.BRUSH: 3.0,
     ir.ToolFamily.CALLIGRAPHY: 3.0,
 }
@@ -124,16 +136,17 @@ def _geometry_blob(triplets: list[tuple[float, float, float]]) -> bytes:
     ])
 
 
-def _pen_type(s: ir.Stroke) -> int:
+def _style(s: ir.Stroke) -> str:
     native = s.tool.native if s.tool else None
-    if native is not None and native.format_id == FORMAT_ID:
-        return int(native.tool_id)
-    return FAMILY_PEN_TYPE.get(s.tool.family if s.tool else None, 0)
+    if (native is not None and native.format_id == FORMAT_ID
+            and str(native.tool_id) in _STYLE_FIELDS):
+        return str(native.tool_id)
+    return _FAMILY_STYLE.get(s.tool.family if s.tool else None, "pressure")
 
 
 def _stroke_record(s: ir.Stroke, k: float, x0: float, y0: float,
                    fidelity: Fidelity, stroke_uuid: str | None = None,
-                   echo: bytes | None = None,
+                   echo: bytes | None = None, item_idx: int = 0,
                    pen_nonce: int | None = None) -> bytes:
     triplets = [
         _clamp_point((x - x0) * k, (y - y0) * k, w)
@@ -154,33 +167,41 @@ def _stroke_record(s: ir.Stroke, k: float, x0: float, y0: float,
     color_msg = (write_float32(1, color.r) + write_float32(2, color.g)
                  + write_float32(3, color.b) + write_float32(4, opacity))
 
-    # Pen type submessage: field 7 -> sub 1 -> field 1 varint; the app
-    # omits field 1 for pen type 0, mirror that. Schema-25 journals add a
-    # nonce as sub-field 2 (meaning [unknown]; present in all app records).
-    pen_type = _pen_type(s)
-    pen_inner = write_varint_field(1, pen_type) if pen_type else b""
+    f3, f5, is_marker = _STYLE_FIELDS[_style(s)]
+
+    # Field 7 is an {index, nonce} identity submessage — the per-page draw
+    # index plus a random u32 (the app omits index 0 on the wire; mirror
+    # that). It does NOT carry the pen style (2026-07-10 finding).
+    ident = write_varint_field(1, item_idx) if item_idx else b""
     if pen_nonce is not None:
-        pen_inner += write_varint_field(2, pen_nonce)
+        ident += write_varint_field(2, pen_nonce)
 
     sid = stroke_uuid or str(uuid.uuid4()).upper()
     stroke_msg = (
         write_len_delimited(1, sid.encode("ascii"))
         + write_len_delimited(2, apple_lz4_compress(_geometry_blob(triplets)))
     )
-    if echo is not None:
-        stroke_msg += write_varint_field(3, 1)
+    if f3:
+        stroke_msg += write_varint_field(3, f3)
     stroke_msg += write_len_delimited(4, color_msg)
+    if f5:
+        stroke_msg += write_varint_field(5, f5)
     if echo is not None:
         stroke_msg += write_len_delimited(6, b"")
-    stroke_msg += write_len_delimited(7, write_len_delimited(1, pen_inner))
+    stroke_msg += write_len_delimited(7, write_len_delimited(1, ident))
     if echo is not None:
         # fields observed in every schema-25 app stroke record: 9 empty
-        # msg, 15 = byte-exact echo of the header's field-2 version msg,
-        # 20 = {1: empty}. Version field 21 stays 24 even in schema-25
-        # files (observed in the Mac export).
+        # msg, 15 = byte-exact echo of the header's field-2 version msg.
+        # Version field 21 stays 24 even in schema-25 files (observed in
+        # the Mac export).
         stroke_msg += (write_len_delimited(9, b"")
-                       + write_len_delimited(15, echo)
-                       + write_len_delimited(20, write_len_delimited(1, b"")))
+                       + write_len_delimited(15, echo))
+    if is_marker:
+        # field 20 = {1: ""} is the marker flag; every other app stroke
+        # carries field 20 as EMPTY bytes (schema 25) or omits it.
+        stroke_msg += write_len_delimited(20, write_len_delimited(1, b""))
+    elif echo is not None:
+        stroke_msg += write_len_delimited(20, b"")
     stroke_msg += write_varint_field(21, SCHEMA_VERSION)
     return write_len_delimited(7, stroke_msg)
 
@@ -477,12 +498,15 @@ def document_to_goodnotes(doc: ir.Document,
                     records.append(_stroke_record(
                         s, k, b.x_min, b.y_min, fidelity,
                         stroke_uuid=event_uuid, echo=seq_msg,
+                        item_idx=i + 9,  # header idx (i+10) minus one,
+                        # matching the observed app relation
                         pen_nonce=rng.getrandbits(31)))
         else:
             records = [bytes.fromhex(meta_hex) if meta_hex
                        else _meta_record(page_uuid)]
-            records += [_stroke_record(s, k, b.x_min, b.y_min, fidelity)
-                        for s in strokes]
+            records += [_stroke_record(s, k, b.x_min, b.y_min, fidelity,
+                                       item_idx=i)
+                        for i, s in enumerate(strokes)]
         pages.append((page_uuid, join_delimited(records)))
 
     def _index(entries: list[tuple[str, str, bool]]) -> bytes:

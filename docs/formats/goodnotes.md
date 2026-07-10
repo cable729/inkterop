@@ -1,13 +1,17 @@
 # GoodNotes (.goodnotes) format
 
-Status: **ink strokes + color + pen-type field decoded across both
-schema versions; schema-25 journal structure + events-log page model
-decoded; same-format round-trip imports and renders in GoodNotes Mac
-(2026-07-09 round 3)**. Verified against public GoodNotes 6 samples
-(schema 24) AND a controlled Mac-app export (GoodNotes 6, Mac App Store,
-2026-07-09, schema 25 — committed as
-`core/tests/fixtures/goodnotes/gn-mac-mixed-pens.goodnotes`). Open: pen-type
-*names*, erasers, images, text, page dims, shape geometry.
+Status: **ink strokes + color + PEN STYLES decoded across both schema
+versions (ball/pressure/pencil/marker/highlighter — see "Pen style");
+schema-25 journal structure + events-log page model decoded; same-format
+round-trip imports and renders in GoodNotes Mac (2026-07-09 round 3)**.
+Verified against public GoodNotes 6 samples (schema 24), a controlled
+Mac-app export (GoodNotes 6, Mac App Store, 2026-07-09, schema 25 —
+committed as `core/tests/fixtures/goodnotes/gn-mac-mixed-pens.goodnotes`),
+AND the iPad calibration page (GoodNotes 7.1.2 iPad export, 2026-07-10,
+`corpus/calibration/goodnotes-calibration.goodnotes`, 91 stroke records
+drawn per `docs/calibration-pages.md`). Open: fountain-vs-brush (not
+stored per stroke), erasers, images, text, page dims, shape geometry,
+events-only pages.
 
 Confidence markers: `[verified]` = confirmed by decoding real files with
 independent code and checking invariants; `[inferred]` = consistent with
@@ -80,26 +84,40 @@ shape change).
 |---|---|---|---|
 | 1 | string | stroke UUID (36 chars) | `[verified]` |
 | 2 | bytes | geometry: Apple-framed LZ4 → tpl blob | `[verified]` |
-| 3 | varint | observed 1 or 5 | `[unknown]` |
+| 3 | varint | **pen style**: absent/0 = constant-width ball pen, 1 = pressure pen (fountain/brush/marker), 5 = pencil (see "Pen style") | `[verified]` (2026-07-10 calibration page) |
 | 4 | message | color: float32 subfields 1=R 2=G 3=B 4=A; omitted subfield = 0.0 (black pen = only alpha present) | `[verified]` |
+| 5 | varint | 1 = **highlighter** (present ONLY on highlighter strokes) | `[verified]` (2026-07-10) |
 | 6 | bytes | often empty | `[unknown]` |
-| **7** | message | **pen type**: subfield 1 is a message whose field 1 varint = pen-type id (absent ⇒ 0); its field 2 = large varint `[unknown]` | `[verified]` (2026-07-09 Mac corpus) |
-| 9 | bytes | often empty | `[unknown]` |
-| 14/15 | message | small varints | `[unknown]` |
-| 20 | bytes | often empty | `[unknown]` |
+| 7 | message | **identity, NOT pen type**: subfield 1 = {1: per-page draw-order index, 2: random u32 nonce} — same shape as the field-15 version msg. Duplicate indices appear when an item is updated/erased | `[verified]` (2026-07-10; the earlier "pen-type id" reading was a draw-order coincidence on a one-stroke-per-tool page) |
+| 9 | bytes | empty on ink; non-empty on shape strokes | `[unknown]` |
+| 14 | varint | 1 on empty-geometry re-records of an existing index → erase/update tombstone? | `[inferred]` (2026-07-10) |
+| 15 | message | {1: version, 2: nonce} — echoes the journal header's field 2 | `[verified]` |
+| 20 | bytes | empty bytes on ink strokes; **{1: ""} submessage = marker** (see "Pen style") | `[verified]` (2026-07-10) |
 | 21 | varint | schema version (24/25) | `[inferred]` |
 
-### Pen-type ids (field 7 → sub 1 → field 1)
+### Pen style (fields 3 + 5 + 20) `[verified 2026-07-10]`
 
-Observed on a page drawn with one stroke per tool: ids
-`{0, 1, 2, 3, 4, 5, 7}`. Confirmed by behavior: **4 = highlighter**
-(24 pt constant width, drawn as highlighter) `[verified]`; **7 = shape
-tool** (empty inline geometry — shape geometry stored elsewhere,
-`[unknown]` where) `[inferred]`; **3 = pencil** (11-float segment layout
-with tilt defaults, see below) `[inferred]`. Ids 0/1/2/5 are pens whose
-UI names await the labeled corpus (case 05): 0/2/5 store pressure
-triplets (5 observed on a wide 18 pt brush-like stroke), 1 stores
-constant-width segments (ball pen?).
+Established by the iPad calibration page (one row per pen style in
+toolbar order: fountain, ball, brush, pencil, highlighter, marker — 8
+probe strokes each, cross-checked against the app's own PDF export and
+the Mac mixed-pens fixture; both files agree on every value):
+
+| UI tool | field 3 | field 5 | field 20 | geometry family | IR family |
+|---|---|---|---|---|---|
+| fountain pen | 1 | — | empty | pressure sig | PEN |
+| brush pen | 1 | — | empty | pressure sig | PEN |
+| ball pen | absent | — | empty | constant-width sig (1.56 pt default) | BALLPOINT |
+| pencil | 5 | — | empty | 11-float sig, real tilt on iPad | PENCIL |
+| highlighter | absent | 1 | empty | constant-width sig (24 pt default) | HIGHLIGHTER |
+| marker | 1 | — | {1: ""} | pressure sig, constant per-point width (18 pt default), drop-shadow render | MARKER |
+
+**Fountain vs brush is NOT distinguishable per stroke** `[verified]`:
+every protobuf field is identical between the two rows (and between the
+Mac fixture's fountain and brush strokes); the tpl-blob differences track
+tilt-data presence, not pen identity (iPad fountain has the tilt layout,
+iPad brush and Mac fountain do not). Both map to the generic PEN family
+with native style `"pressure"`. Shape strokes (empty inline geometry,
+non-empty field 9) ride the ball-pen encoding `[inferred]`.
 
 ## Geometry blob (after Apple-LZ4 decompression)
 
@@ -130,46 +148,54 @@ elem   := scalar | "S(" scalar+ ")"     # struct of scalars
 array  := u32 count + count elements
 ```
 
-The signature varies **per pen type**; three families observed:
+The signature varies **per pen style**; three families observed:
 
-**Pressure pens** (types 0/2/5; schema 24 fountain pen):
-`vA(v)A(u)A(u)A(v)A(v)A(u)A(u)A(u)A(u)A(v)` —
+**Pressure pens** (field 3 = 1: fountain/brush/marker; schema 24
+fountain pen): `vA(v)A(u)A(u)A(v)A(v)A(u)A(u)A(u)A(u)A(v)` —
 
 | # | Type | Content | Confidence |
 |---|---|---|---|
-| 1 | u16[] | small flags | `[unknown]` |
-| 2 | f32[3-4] | (x, y, w[, 0]) anchor | `[inferred]` |
+| 1 | u16[] | flags; **bit 2 (values {4,5} vs {0,1}) selects the sec-3 path layout**: set = 9-float sample pairs, clear = flat triplets | `[verified]` (2026-07-10, consistent across schema 24+25 corpora) |
+| 2 | f32[3-4] | (x, y, w) anchor; 4th float (tilt layout only) ≈ altitude-like angle | `[inferred]` |
 | 3 | f32[3n] or f32[9m] | **the rendered path** (see layouts below) | `[verified]` |
 | 4 | u16[] | small values | `[unknown]` |
 | 5 | u16[] | per-segment codes | `[unknown]` |
 | 6 | f32[] | (x,y) pairs subset — knot points? | `[unknown]` |
 | 7 | f32[] | often empty | `[unknown]` |
 | 8 | f32[2m] | (x, y) polygon ≈ precomputed **outline polygon** | `[inferred]` |
-| 9 | f32[5n] | x, y, w + two more per point — raw dynamics? | `[unknown]`, high value |
-| 10 | u16[n] | per-point flags | `[unknown]` |
+| 9 | f32[5n] or f32[7n] | per-point raw dynamics: stride 5 (x, y, w, a1, a2) without tilt, stride 7 with — matching the sec-1 flag | `[unknown]` semantics, high value |
+| 10 | u16[n] | per-point flags (n ≈ point count, off by subpath breaks) | `[unknown]` |
 
-**Constant-width pens** (types 1/4/7):
+**Constant-width pens** (ball pen, highlighter, shapes):
 `vuA(v)A(S(uu))A(S(uuuu))vA(f)` — the lone `u` scalar is the **pen width
-in points** `[verified]` (1.56 pt ball pen, 24 pt highlighter);
-`A(S(uu))` holds a single anchor pair; **`A(S(uuuu))` is the path** as
-flattened segments (x1, y1, x2, y2), consecutive segments ~touching
-`[verified]`. Shape strokes (type 7) have all counts 0.
+in points** `[verified]` (1.56 pt ball pen, 24 pt highlighter — the size
+setting); `A(S(uu))` holds a single anchor pair; **`A(S(uuuu))` is the
+path** as flattened segments (x1, y1, x2, y2), consecutive segments
+~touching `[verified]`. Shape strokes have all counts 0.
 
-**Pencil** (type 3):
+**Pencil** (field 3 = 5):
 `vuA(v)A(S(uuuuu))A(S(u*11))A(S(uu))A(v)A(S(uu))A(S(uuuu))A(u)` —
 `A(S(u*11))` is the path as segments `(?, x1, y1, c3, c4, 0, x2, y2, c3,
-c4, 0)` where col0 is non-float-like bits `[unknown]` and c3/c4 sit at
-**pi/6 and pi/3 — Apple Pencil's default altitude/azimuth** on a Mac
-(no physical tilt) `[inferred]`. Corpus case 17 (iPad tilt) should make
-these vary → raw tilt for `--fidelity raw`.
+c4, 0)` where col0 is non-float-like bits `[unknown]` and c3/c4 are
+**altitude/azimuth-like angles**: pi/6 and pi/3 constants on a Mac (no
+physical tilt), smoothly varying per point on the iPad calibration page
+`[verified varying; angle semantics inferred]` → raw tilt candidates for
+`--fidelity raw`.
 
 ### Path layouts within f32 arrays `[verified]`
 
-- **Flat triplets**: count divisible by 3; (x, y, width) per point
-  (fountain/pressure pens).
-- **9-float segments** (wide brush strokes, schema 25): count divisible
-  by 9; groups of (x1, y1, w1, x2, y2, w2, 0, 0, k) with k≈0.1 constant
-  `[unknown]`; path = interleaved segment endpoints.
+- **Flat triplets** (sec-1 flag bit 2 clear): count divisible by 3;
+  (x, y, width) per point.
+- **9-float sample pairs** (sec-1 flag bit 2 set; also pre-calibration
+  "brush segments"): count divisible by 9; groups of
+  (x1, y1, w1, x2, y2, w2, alt1, alt2, k) = TWO path samples plus one
+  altitude-like angle per sample (0.0 on Mac/mouse, ~1.0–1.7 rad varying
+  on iPad `[inferred]`) and a per-stroke constant k (0.1/0.3/0.6
+  observed) `[unknown]`. Consecutive groups do NOT share endpoints —
+  the path is all samples in order. A 9-float array is divisible by 3
+  too; parsing it as triplets yields phantom points from the tilt
+  columns (reader bug fixed 2026-07-10 — the flag bit decides).
+- Sub-path breaks appear as (~0, ~0, w) sentinel points in either layout.
 - Widths are device-rendered with pressure baked in (like reMarkable);
   never re-derive from pressure.
 
@@ -190,10 +216,11 @@ falls back to zip order.
 
 ## Reader
 
-`core/src/inkterop/formats/goodnotes/` — ink + color only, marked
-experimental. Emits IR strokes with a WIDTH channel and
-`STROKED_VARIABLE` appearance; tool family is always PEN until the
-pen-type field is found.
+`core/src/inkterop/formats/goodnotes/` — ink + color + pen style, marked
+experimental. Emits IR strokes with a WIDTH channel; tool families map
+per the "Pen style" table (fountain/brush → PEN with native style
+`"pressure"`), constant-width pens get `STROKED_CONSTANT` appearance,
+the rest `STROKED_VARIABLE`.
 
 ## index.events.pb — the document's source of truth `[verified 2026-07-09]`
 
@@ -255,33 +282,57 @@ Mac app-import check passes (docs/validated-writes.md). What it emits:
   deflates on top). Triplets are clamped to the reader's plausibility
   window and dots/two-point strokes are padded to 3 points; points at
   (~0, ~0) are nudged off the sub-path-break sentinel.
-- **Pen types**: NativeTool ids from a GoodNotes source round-trip
-  verbatim; otherwise highlighter → 4, pencil → 3, everything else → 0.
+- **Pen styles**: written as stroke fields 3/5/20 per the "Pen style"
+  table (native GoodNotes style strings round-trip verbatim; IR families
+  map highlighter/pencil/ball/marker, everything else → pressure pen).
+  Stroke field 7 carries an {index, nonce} identity msg, not a style.
 - **Fidelity**: `exact` emits per-point rendered widths (appearance.width
   or the WIDTH channel), `native` constant family-default widths
-  (24 pt highlighter, 1.56 pt pens), `raw` raises (GoodNotes stores
-  rendered widths, not raw dynamics).
+  (24 pt highlighter, 18 pt marker, 1.56 pt pens), `raw` raises
+  (GoodNotes stores rendered widths, not raw dynamics).
 - **Page dimensions**: the dims field is still `[unknown]`, so written
   pages implicitly assume A4; ink extents drive the reader's bounds.
 
 ## Open questions (corpus cases that resolve them)
 
-1. Pen-type id → UI tool names — case 05 with labeled per-tool files.
-2. Raw dynamics: pressure-pen section 9 columns and pencil c3/c4 tilt —
-   cases 16, 17 (iPad+Pencil).
+1. ~~Pen-type id → UI tool names~~ RESOLVED 2026-07-10 (see "Pen style");
+   remaining: is fountain-vs-brush stored ANYWHERE (per-document tool
+   state?) or truly discarded?
+2. Raw dynamics: pressure-pen section-9 column semantics (stride 5/7)
+   and the 9-float alt1/alt2 + pencil c3/c4 angle meanings — fit against
+   the calibration page's tilt-pair probes.
 3. Page dimensions field (reader currently grows bounds to ink extents;
    the mixed-pens fixture page is wider than A4) — case 14.
-4. Shape-tool geometry location (type-7 strokes have empty inline
-   geometry) — case 09.
-5. Eraser representation — case 08.
+4. Shape-tool geometry location (shape strokes have empty inline
+   geometry + non-empty field 9) — case 09.
+5. Eraser representation — case 08. Candidate found 2026-07-10: an
+   empty-geometry re-record of an existing draw index with stroke field
+   14 = 1 (tombstone?); the reader does not yet honor it — erased
+   strokes may still render.
 6. Images & text boxes — cases 10, 11.
 7. PDF background linkage (attachments ↔ pages) — case 12.
 8. index.events.pb / index.search.pb / document.info.pb contents.
 9. Paper template (grid/lined background) encoding — nothing
    template-like found in the page records yet.
+10. Events-only pages: the calibration export's page 1 has a 0-byte
+    `notes/` member — its strokes exist only in `index.events.pb`; the
+    reader shows the page empty.
 
 ## Changelog
 
+- 2026-07-10 (iPad calibration page): PEN STYLES decoded — stroke field 3
+  (0 ball / 1 pressure / 5 pencil) + field 5 (highlighter) + field 20
+  ({1: ""} = marker); stroke field 7 exposed as an {index, nonce}
+  identity msg (the old "pen-type id" table was a draw-order coincidence
+  on the one-stroke-per-tool Mac page — ids 0–7 were just draw order).
+  Fountain vs brush shown NOT to be stored per stroke. Geometry: sec-1
+  flag bit 2 selects the pressure-pen path layout (9-float sample pairs
+  with per-sample tilt angles vs flat triplets); fixed the reader
+  misparse that turned iPad tilt columns into phantom origin-area points.
+  Marker default 18 pt; field-14 tombstone candidate for erasures.
+  Reader emits BALLPOINT/PENCIL/MARKER/HIGHLIGHTER/PEN families; writer
+  emits fields 3/5/20 and no longer stamps every synthesized stroke with
+  the marker flag.
 - 2026-07-09 (round 3, autonomous app loop): schema-25 page-file JOURNAL
   structure decoded (header/payload pairs, uuid+echo linkage) via import
   bisection; events-log page model decoded (paper/page-created/page-link

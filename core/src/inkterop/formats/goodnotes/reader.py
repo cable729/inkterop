@@ -9,14 +9,19 @@ version marker, NOT a schema).
 Stroke message (field numbers within record field #7):
   #1  UUID string of the stroke
   #2  geometry: Apple-framed LZ4 -> `tpl\\0` section blob (see below)
+  #3  pen style: absent/0 = constant-width ball pen, 1 = pressure pen
+      (fountain/brush/marker), 5 = pencil
   #4  color: float32 subfields 1=R 2=G 3=B 4=A, omitted = 0.0
+  #5  varint 1 = highlighter
+  #7  {index, nonce} identity msg — NOT a pen type (2026-07-10 finding)
+  #20 {1: ""} = marker; empty bytes on every other stroke
 Geometry blob: `tpl\\0` + u32 total length + ASCII type-descriptor string +
-u16 metadata arrays + sections of [u32 float_count][float32 * count]. The
-rendered path is the FIRST section at offset >= 64 holding >= 2 plausible
-(x, y, width) triplets; coordinates are PDF points @72dpi, top-left origin,
-width has pressure baked in (device-rendered width, like reMarkable).
+typed sections (see parse_tpl). Coordinates are PDF points @72dpi,
+top-left origin, width has pressure baked in (device-rendered width, like
+reMarkable). Fountain vs brush is NOT stored per stroke — both read as
+generic PEN.
 
-Not yet decoded: pen type/highlighter flags, erasers, images, text boxes,
+Not yet decoded: erasers (field 14 tombstones?), images, text boxes,
 page dimensions (A4 assumed), PDF-background linkage. Tracked in
 docs/formats/goodnotes.md with confidence markers.
 """
@@ -150,9 +155,13 @@ def parse_tpl(blob: bytes) -> list[tuple[str, str, list]]:
 def extract_path(blob: bytes) -> tuple[list[tuple[float, float, float]], bool]:
     """Geometry blob -> ((x, y, width) triplets, constant_width flag).
 
-    Pressure pens store flat float triplets (per-point width); constant
-    pens/highlighters store one width scalar + arrays of (x, y) structs;
-    pencils store 5+-float structs whose first three are (x, y, w).
+    Pressure pens store either flat (x, y, w) triplets or 9-float sample
+    pairs (x1, y1, w1, x2, y2, w2, alt1, alt2, k) — alt* are per-sample
+    Apple Pencil altitude-like angles (0.0 on Mac/mouse), k [unknown].
+    Which layout is in use is flagged by bit 2 of the first u16 section
+    (values {4, 5} = 9-float, {0, 1} = triplets) [verified across schema
+    24+25 corpora, 2026-07-10]. Constant pens/highlighters store one
+    width scalar + arrays of (x, y) structs; pencils 5+-float structs.
     Shape objects have empty geometry here (stored elsewhere, [unknown]).
     """
     try:
@@ -163,25 +172,35 @@ def extract_path(blob: bytes) -> tuple[list[tuple[float, float, float]], bool]:
     scalar_width = next(
         (v[0] for k, s, v in sections if k == "scalar" and s == "u"), None
     )
+    flag_bits = next((set(v) for k, s, v in sections
+                      if k == "array" and s == "v"), set())
+    has_tilt = any(f & 4 for f in flag_bits)
+
+    def _pt_ok(t):
+        return _plausible(*t) or _is_break(*t)
+
     for kind, spec, vals in sections:
         if kind != "array" or spec != "u" or len(vals) < 9:
             continue
-        # Brush pens: 9-float flattened segments
-        # (x1, y1, w1, x2, y2, w2, 0, 0, k) — interleave endpoints.
+        # 9-float sample pairs; without the tilt flag the trailing
+        # (alt1, alt2) are zeros and the layout is detectable directly.
         if len(vals) % 9 == 0:
             groups = [vals[i:i + 9] for i in range(0, len(vals), 9)]
-            if all(_is_break(*g[6:9]) and _plausible(*g[0:3])
-                   and _plausible(*g[3:6]) for g in groups):
+            if ((has_tilt or all(_is_break(*g[6:9]) for g in groups))
+                    and all(_pt_ok(g[0:3]) and _pt_ok(g[3:6])
+                            for g in groups)):
                 path: list[tuple[float, float, float]] = []
                 for g in groups:
                     for t in (tuple(g[0:3]), tuple(g[3:6])):
                         if not path or (abs(path[-1][0] - t[0]) > 1e-6
                                         or abs(path[-1][1] - t[1]) > 1e-6):
                             path.append(t)
-                if len(path) >= 2:
+                if sum(1 for t in path if not _is_break(*t)) >= 2:
                     return path, False
-        # Pressure pens: flat (x, y, w) triplets.
-        if len(vals) % 3 == 0:
+        # Flat (x, y, w) triplets. Never valid when the tilt flag is set
+        # (a 9-float array is divisible by 3 too and would misparse into
+        # phantom points near the origin).
+        if not has_tilt and len(vals) % 3 == 0:
             triplets = [tuple(vals[i:i + 3])
                         for i in range(0, len(vals), 3)]
             if all(_plausible(*t) for t in triplets):
@@ -227,27 +246,47 @@ def _scan_fallback(blob: bytes) -> list[tuple[float, float, float]]:
     return []
 
 
-# Pen type (stroke field 7 -> submessage field 1). Only the highlighter is
-# behaviorally confirmed (24pt constant width, drawn as highlighter);
-# remaining names await the labeled corpus (docs/corpus-protocol.md case 05).
-_PEN_TYPE_FAMILY = {
-    4: ir.ToolFamily.HIGHLIGHTER,  # [verified by width/appearance]
+# Pen style (2026-07-10, iPad calibration page + Mac mixed-pens fixture —
+# docs/formats/goodnotes.md "Pen style"). Encoded across three stroke
+# fields: #3 varint (absent/0 = constant-width ball pen, 1 = pressure pen,
+# 5 = pencil), #5 varint 1 = highlighter, #20 = {1: ""} submessage = marker
+# (every other stroke carries field 20 as EMPTY bytes). Fountain vs brush
+# pen is NOT distinguishable in the stroke record (all fields identical) —
+# both map to the generic PEN family. Stroke field 7 turned out to be an
+# {index, nonce} identity message; the old field-7 "pen-type id" table was
+# a draw-order coincidence.
+_STYLE_FAMILY = {
+    "ball": ir.ToolFamily.BALLPOINT,
+    "pressure": ir.ToolFamily.PEN,  # fountain or brush
+    "pencil": ir.ToolFamily.PENCIL,
+    "marker": ir.ToolFamily.MARKER,
+    "highlighter": ir.ToolFamily.HIGHLIGHTER,
 }
-_SHAPE_PEN_TYPE = 7  # empty inline geometry; shape objects [inferred]
 
 
-def _pen_type(fields: dict) -> int:
-    if 7 not in fields:
-        return 0
-    try:
-        sub = fields_by_number(fields[7][0].value)
-        inner = sub.get(1)
-        if inner and isinstance(inner[0].value, bytes):
-            first = fields_by_number(inner[0].value).get(1)
-            return int(first[0].value) if first else 0
-    except (WireError, TypeError):
-        pass
+def _varint(fields: dict, num: int) -> int:
+    if num in fields and isinstance(fields[num][0].value, int):
+        return fields[num][0].value
     return 0
+
+
+def _pen_style(fields: dict) -> str:
+    """Stroke message fields -> symbolic pen style (keys of _STYLE_FAMILY)."""
+    if _varint(fields, 5) == 1:
+        return "highlighter"
+    f3 = _varint(fields, 3)
+    if f3 == 5:
+        return "pencil"
+    if f3 == 1:
+        f20 = fields[20][0].value if 20 in fields else b""
+        if isinstance(f20, bytes) and f20:
+            try:
+                if 1 in fields_by_number(f20):
+                    return "marker"
+            except WireError:
+                pass
+        return "pressure"
+    return "ball"
 
 
 def _strokes_from_record(record: bytes) -> list[ir.Stroke]:
@@ -282,8 +321,8 @@ def _strokes_from_record(record: bytes) -> list[ir.Stroke]:
                 a = fl
     color = ir.Color(r, g, b, a if a > 0 else 1.0)
 
-    pen_type = _pen_type(fields)
-    family = _PEN_TYPE_FAMILY.get(pen_type, ir.ToolFamily.PEN)
+    style = _pen_style(fields)
+    family = _STYLE_FAMILY[style]
     is_highlight = family is ir.ToolFamily.HIGHLIGHTER
     rgb = ir.Color(color.r, color.g, color.b)
 
@@ -295,7 +334,10 @@ def _strokes_from_record(record: bytes) -> list[ir.Stroke]:
             y=[p[1] for p in sub],
             tool=ir.ToolRef(
                 family=family,
-                native=ir.NativeTool(FORMAT_ID, pen_type, {}),
+                native=ir.NativeTool(FORMAT_ID, style, {
+                    "field3": _varint(fields, 3),
+                    "field5": _varint(fields, 5),
+                }),
             ),
             color=rgb,
             channels={ir.Channel.WIDTH: widths},

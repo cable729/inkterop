@@ -103,6 +103,32 @@ def test_extract_path_constant_width_struct_layout():
     assert path == [pytest.approx((x, y, 24.0)) for x, y in pairs]
 
 
+def test_extract_path_tilt_sample_pairs():
+    """iPad pressure strokes: 9-float (x1,y1,w1, x2,y2,w2, alt1,alt2,k)
+    sample pairs, selected by bit 2 of the flags section. Must NOT be
+    read as flat triplets (divisible by 3 too — the old triplet branch
+    produced phantom points from the tilt columns)."""
+    from inkterop.formats.goodnotes.wire import encode_tpl
+
+    groups = [
+        (510.3, 38.8, 0.39, 508.8, 38.6, 0.55, 1.73, 1.71, 0.6),
+        (507.8, 38.4, 0.70, 508.4, 39.3, 0.73, 1.70, 1.69, 0.6),
+        (509.0, 40.1, 0.75, 510.2, 41.0, 0.71, 1.68, 1.68, 0.6),
+    ]
+    blob = encode_tpl([
+        ("scalar", "v", [2]),
+        ("array", "v", [4, 5, 5]),                    # bit 2 = tilt layout
+        ("array", "u", [510.3, 38.8, 0.39, 1.75]),    # anchor
+        ("array", "u", [v for g in groups for v in g]),
+    ])
+    path, constant = extract_path(blob)
+    assert constant is False
+    assert len(path) == 6  # two samples per group
+    assert all(507 < x < 511 for x, _, _ in path)  # no phantom tilt points
+    assert path[0] == pytest.approx((510.3, 38.8, 0.39), abs=1e-3)
+    assert path[1] == pytest.approx((508.8, 38.6, 0.55), abs=1e-3)
+
+
 def test_parse_tpl_rejects_residue():
     blob = _tpl_blob([(10.0, 20.0, 1.5), (30.0, 40.0, 2.0)])
     with pytest.raises(Exception, match="tpl"):
@@ -116,23 +142,40 @@ FIXTURE = Path(__file__).parent / "fixtures" / "goodnotes" / \
 
 
 def test_fixture_mixed_pens():
-    """GoodNotes 6 Mac export (schema 25): all layout variants in one page."""
+    """GoodNotes 6 Mac export (schema 25): all layout variants in one page.
+
+    Draw order on the fixture page: fountain, ball, brush, pencil,
+    highlighter, marker, shape ellipse (no inline ink). Pen style comes
+    from stroke fields 3/5/20 — stroke field 7 is an identity index, not
+    a pen type (2026-07-10 calibration-page finding).
+    """
     reader = GoodnotesReader()
     assert reader.detect(FIXTURE)
     doc = reader.read(FIXTURE)
     doc.validate()
     strokes = list(doc.pages[0].strokes())
     assert len(strokes) == 6  # 5 pens + highlighter; shape ellipse skipped
-    families = [s.tool.family for s in strokes]
-    assert families.count(ir.ToolFamily.HIGHLIGHTER) == 1
-    hl = strokes[families.index(ir.ToolFamily.HIGHLIGHTER)]
+    by_style: dict[str, list] = {}
+    for s in strokes:
+        by_style.setdefault(s.tool.native.tool_id, []).append(s)
+    assert {k: len(v) for k, v in by_style.items()} == {
+        "pressure": 2,  # fountain + brush (not distinguishable per stroke)
+        "ball": 1, "pencil": 1, "highlighter": 1, "marker": 1,
+    }
+    assert {s.tool.family for s in by_style["pressure"]} == {ir.ToolFamily.PEN}
+    assert by_style["ball"][0].tool.family is ir.ToolFamily.BALLPOINT
+    assert by_style["pencil"][0].tool.family is ir.ToolFamily.PENCIL
+    hl = by_style["highlighter"][0]
+    assert hl.tool.family is ir.ToolFamily.HIGHLIGHTER
     assert hl.appearance.width == pytest.approx(24.0)
     assert hl.appearance.underlay is True
-    pen_types = {s.tool.native.tool_id for s in strokes}
-    assert pen_types == {0, 1, 2, 3, 4, 5}  # type 7 (shape) has no inline ink
-    # red brush stroke decoded from 9-float segments
-    red = [s for s in strokes if s.color.r > 0.9 and s.color.g < 0.5]
-    assert red and min(red[0].x) > 500  # right-hand region, not origin
+    # red marker stroke (field 20 = {1: ""}), 9-float sample pairs
+    marker = by_style["marker"][0]
+    assert marker.tool.family is ir.ToolFamily.MARKER
+    assert marker.color.r > 0.9 and marker.color.g < 0.5
+    assert min(marker.x) > 500  # right-hand region, not origin
+    assert all(w == pytest.approx(18.0)
+               for w in marker.channels[ir.Channel.WIDTH])
     assert all(0 < w <= 60
                for s in strokes for w in s.channels[ir.Channel.WIDTH])
 

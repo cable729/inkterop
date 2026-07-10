@@ -203,7 +203,7 @@ def test_writer_synthetic_round_trip(tmp_path):
     assert pen.color.rgb() == pytest.approx((0.0, 0.0, 1.0))
 
     assert hl.tool.family is ir.ToolFamily.HIGHLIGHTER
-    assert hl.tool.native.tool_id == 4
+    assert hl.tool.native.tool_id == "highlighter"
     assert hl.appearance.underlay is True
     assert hl.appearance.opacity == pytest.approx(0.5, abs=1 / 255)
     assert hl.channels[ir.Channel.WIDTH] == pytest.approx([20.0] * 3)
@@ -211,7 +211,8 @@ def test_writer_synthetic_round_trip(tmp_path):
     # dot on page 2 survives (padded to >= 3 identical triplet points)
     p1 = list(back.pages[1].strokes())
     assert len(p1) == 1
-    assert p1[0].tool.native.tool_id == 3  # pencil pen-type id
+    assert p1[0].tool.native.tool_id == "pencil"  # field 3 = 5 on the wire
+    assert p1[0].tool.family is ir.ToolFamily.PENCIL
     assert all(x == pytest.approx(200.0) for x in p1[0].x)
     assert all(y == pytest.approx(200.0) for y in p1[0].y)
 
