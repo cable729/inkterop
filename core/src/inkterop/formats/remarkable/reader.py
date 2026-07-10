@@ -157,6 +157,9 @@ def _stroke_from_line(line: si.Line, dx: float, dy: float,
                     "color": int(line.color.value),
                     "color_rgba": list(line.color_rgba) if line.color_rgba else None,
                     "thickness_scale": line.thickness_scale,
+                    # device texture phase (pencil grain, brush); the
+                    # writer restores it so round-trips render alike on-app
+                    "starting_length": line.starting_length,
                 },
             ),
         ),
@@ -218,7 +221,7 @@ def read_page(rm_path: Path, landscape: bool = False, template: str = "",
         point_scale=POINT_SCALE,
         layers=[ir.Layer(strokes=strokes)],
         background=resolve_template(template),
-        extra={"remarkable": {"landscape": landscape}},
+        extra={"remarkable": {"landscape": landscape, "template": template}},
     )
 
 

@@ -1,7 +1,8 @@
 """reMarkable .rm / .rmdoc writer tests.
 
-Golden render tests are untouched — these only assert IR round-trips
-through rmscene write->read.
+Golden render tests are untouched — these assert IR round-trips through
+rmscene write->read, plus render-level round-trip identity (op dumps via
+the golden test's normalization) and foreign-mapping visual fidelity.
 """
 from __future__ import annotations
 
@@ -13,10 +14,110 @@ import pytest
 
 from inkterop import ir
 from inkterop.formats.base import Fidelity
-from inkterop.formats.remarkable.reader import RemarkableReader
-from inkterop.formats.remarkable.writer import RemarkablePageWriter, RmdocWriter
+from inkterop.formats.remarkable.reader import RemarkableReader, read_page
+from inkterop.formats.remarkable.writer import (
+    RemarkablePageWriter,
+    RmdocWriter,
+    write_rm_page,
+)
+from inkterop.render import RenderConfig, render_document
+
+from test_golden_remarkable import pdf_ops
 
 FIXDIR = Path(__file__).parent / "fixtures" / "remarkable"
+MANIFEST = json.loads((FIXDIR / "manifest.json").read_text())
+
+
+def _render_page(page: ir.Page, landscape: bool, out: Path) -> Path:
+    doc = ir.Document(
+        format_id="remarkable",
+        orientation="landscape" if landscape else "portrait",
+        pages=[page],
+    )
+    render_document(doc, out, RenderConfig())
+    return out
+
+
+@pytest.mark.parametrize("slug", sorted(MANIFEST))
+def test_round_trip_render_ops_identical(tmp_path, slug):
+    """fixture -> IR -> write .rm -> IR must render op-identically."""
+    info = MANIFEST[slug]
+    landscape = info["orientation"] == "landscape"
+    src = read_page(FIXDIR / info["file"], landscape=landscape,
+                    template=info["template"])
+    rt = tmp_path / "rt.rm"
+    write_rm_page(src, rt)
+    back = read_page(rt, landscape=landscape, template=info["template"])
+
+    ops_a = pdf_ops(_render_page(src, landscape, tmp_path / "a.pdf"))
+    ops_b = pdf_ops(_render_page(back, landscape, tmp_path / "b.pdf"))
+    assert ops_a == ops_b
+
+
+def test_round_trip_render_pixels_identical(tmp_path):
+    """Pixel-level variant on the fixture used for the app-open check."""
+    from inkterop.visual.diff import compare
+    from inkterop.visual.raster import pdf_pages_to_images
+
+    src = read_page(FIXDIR / "highlighter-marker-pencil.rm")
+    rt = tmp_path / "rt.rm"
+    write_rm_page(src, rt)
+    back = read_page(rt)
+    a = pdf_pages_to_images(
+        _render_page(src, False, tmp_path / "a.pdf"), dpi=96)[0]
+    b = pdf_pages_to_images(
+        _render_page(back, False, tmp_path / "b.pdf"), dpi=96)[0]
+    r = compare(a, b, mode="strict", make_diff_image=False)
+    assert r.n_diff_pixels == 0
+
+
+def test_saber_to_rm_renders_like_saber(tmp_path):
+    """Foreign mapping: saber -> .rm must not restyle into artifacts.
+
+    Guards the three app-open failures: hollow/doubled pen (raw foreign
+    pressure), sparse-dot pencil (same), solid saturated highlighter
+    (opacity lost + palette matched at the wrong scale, PenColor.BLACK).
+    Measured 0.946 ink-match after the fixes (0.041 before, 96 dpi
+    registered mode); 0.90 leaves margin for raster jitter while any one
+    artifact returning drops the score far below it.
+    """
+    from inkterop.formats.saber.reader import SaberReader
+    from inkterop.visual.diff import compare
+    from inkterop.visual.raster import pdf_pages_to_images
+
+    saber = SaberReader().read(
+        FIXDIR.parent / "saber" / "saber-mac-pens-text.sba")
+    doc = ir.Document(format_id="saber", title="p0", pages=[saber.pages[0]])
+
+    a_pdf = tmp_path / "direct.pdf"
+    render_document(doc, a_pdf, RenderConfig())
+
+    rm = tmp_path / "conv.rm"
+    RemarkablePageWriter().write(doc, rm, Fidelity.EXACT)
+    conv = RemarkableReader().read(rm)
+    b_pdf = tmp_path / "conv.pdf"
+    render_document(conv, b_pdf, RenderConfig())
+
+    a = pdf_pages_to_images(a_pdf, dpi=96)[0]
+    b = pdf_pages_to_images(b_pdf, dpi=96)[0]
+    r = compare(a, b, mode="registered", make_diff_image=False)
+    assert r.aspect_warning is None, r.aspect_warning
+    assert r.ink_match_ratio >= 0.90, f"ink match {r.ink_match_ratio:.4f}"
+
+    # the specific bad mappings, at the block level
+    from rmscene import read_blocks
+    from rmscene import scene_items as si
+    from rmscene.scene_stream import SceneLineItemBlock
+
+    with open(rm, "rb") as f:
+        lines = [b.item.value for b in read_blocks(f)
+                 if isinstance(b, SceneLineItemBlock) and b.item.value]
+    hl = next(ln for ln in lines if ln.tool is si.Pen.HIGHLIGHTER_2)
+    assert hl.color is not si.PenColor.BLACK  # palette scale bug
+    assert hl.color_rgba[3] == 255  # opacity baked into rgb, not dropped
+    assert hl.color_rgba[2] > 128  # composited over white, not saturated
+    pencil = next(ln for ln in lines if ln.tool is si.Pen.PENCIL_2)
+    assert min(p.pressure for p in pencil.points) >= 200  # synthesized
 
 
 @pytest.mark.parametrize("name", [

@@ -44,6 +44,7 @@ from rmscene.scene_stream import (
     MigrationInfoBlock,
     PageInfoBlock,
     SceneGroupItemBlock,
+    SceneInfo,
     SceneLineItemBlock,
     SceneTreeBlock,
     TreeNodeBlock,
@@ -73,9 +74,10 @@ _FAMILY_PEN = {
 
 
 def _nearest_pen_color(color: ir.Color) -> si.PenColor:
-    def dist(rgb: tuple[float, float, float]) -> float:
-        return ((rgb[0] - color.r) ** 2 + (rgb[1] - color.g) ** 2
-                + (rgb[2] - color.b) ** 2)
+    def dist(rgb: tuple[int, int, int]) -> float:
+        # palette is 0-255, IR colors are 0-1
+        return ((rgb[0] / 255 - color.r) ** 2 + (rgb[1] / 255 - color.g) ** 2
+                + (rgb[2] / 255 - color.b) ** 2)
     return min(RM_PALETTE, key=lambda pc: dist(RM_PALETTE[pc]))
 
 
@@ -100,9 +102,45 @@ def _line_from_stroke(s: ir.Stroke, k: float, dx: float, dy: float) -> si.Line:
         base = (s.appearance.width if s.appearance and s.appearance.width
                 else 2.0)
         widths = [base] * n
-    pressures = s.channels.get(ir.Channel.PRESSURE) or [0.5] * n
     speeds = s.channels.get(ir.Channel.SPEED) or [0.0] * n
     azimuths = s.channels.get(ir.Channel.TILT_AZIMUTH) or [0.0] * n
+
+    if native is not None:
+        pressures = s.channels.get(ir.Channel.PRESSURE) or [0.5] * n
+        pen = si.Pen(int(native.tool_id))
+        color = si.PenColor(int(native.params.get("color", 0)))
+        rgba = native.params.get("color_rgba")
+        color_rgba = tuple(rgba) if rgba else None
+        thickness = float(native.params.get("thickness_scale", 1.0))
+        starting_length = float(native.params.get("starting_length", 0.0))
+    else:
+        family = s.tool.family if s.tool else ir.ToolFamily.UNKNOWN
+        pen = _FAMILY_PEN.get(family, si.Pen.FINELINER_2)
+        render = s.appearance.color if s.appearance else s.color
+        opacity = s.appearance.opacity if s.appearance else 1.0
+        thickness = 1.0
+        starting_length = 0.0
+        # Foreign pressure is calibrated to the source app's stylus; the
+        # device re-derives ink density from it (pencil grain, ballpoint
+        # tone), so raw pass-through renders sparse/hollow. Synthesize:
+        # pencil from the target alpha (inverse of PenModel.alpha), other
+        # pens a firm constant — width already carries the geometry.
+        if family is ir.ToolFamily.PENCIL:
+            alphas = s.channels.get(ir.Channel.ALPHA) or [opacity] * n
+            pressures = [min(a + 0.05, 1.0) for a in alphas]
+        else:
+            pressures = [0.8] * n
+        if family is ir.ToolFamily.HIGHLIGHTER:
+            # Highlighters render at the device's own fixed translucency;
+            # bake the source opacity into the rgb (composite over white)
+            # or the mark comes out fully saturated.
+            render = ir.Color(1.0 - opacity * (1.0 - render.r),
+                              1.0 - opacity * (1.0 - render.g),
+                              1.0 - opacity * (1.0 - render.b))
+            opacity = 1.0
+        color = _nearest_pen_color(render)
+        color_rgba = (round(render.r * 255), round(render.g * 255),
+                      round(render.b * 255), round(opacity * 255))
 
     points = [
         si.Point(
@@ -116,56 +154,48 @@ def _line_from_stroke(s: ir.Stroke, k: float, dx: float, dy: float) -> si.Line:
         for i, (x, y) in enumerate(zip(s.x, s.y))
     ]
 
-    if native is not None:
-        pen = si.Pen(int(native.tool_id))
-        color = si.PenColor(int(native.params.get("color", 0)))
-        rgba = native.params.get("color_rgba")
-        color_rgba = tuple(rgba) if rgba else None
-        thickness = float(native.params.get("thickness_scale", 1.0))
-    else:
-        family = s.tool.family if s.tool else ir.ToolFamily.UNKNOWN
-        pen = _FAMILY_PEN.get(family, si.Pen.FINELINER_2)
-        render = s.appearance.color if s.appearance else s.color
-        opacity = s.appearance.opacity if s.appearance else 1.0
-        color = _nearest_pen_color(render)
-        color_rgba = (round(render.r * 255), round(render.g * 255),
-                      round(render.b * 255), round(opacity * 255))
-        thickness = 1.0
-
     return si.Line(
         color=color,
         tool=pen,
         points=points,
         thickness_scale=thickness,
-        starting_length=0.0,
+        starting_length=starting_length,
         color_rgba=color_rgba,
     )
 
 
 def page_to_blocks(page: ir.Page, author: uuidlib.UUID | None = None):
-    """Minimal v6 block sequence for one IR page."""
+    """v6 block sequence for one IR page, in device block order
+    (AuthorIds, MigrationInfo, PageInfo, SceneInfo, SceneTrees,
+    TreeNodes, SceneGroupItems, lines — observed on Paper Pro pages)."""
     yield AuthorIdsBlock(author_uuids={1: author or uuidlib.uuid4()})
     yield MigrationInfoBlock(migration_id=CrdtId(1, 1), is_device=True)
+    # pure-ink page: device files carry 0/0 text counts (we write no text)
     yield PageInfoBlock(loads_count=1, merges_count=0,
-                        text_chars_count=1, text_lines_count=1)
-    yield TreeNodeBlock(si.Group(node_id=CrdtId(0, 1)))
+                        text_chars_count=0, text_lines_count=0)
+    yield SceneInfo(
+        current_layer=LwwValue(CrdtId(0, 0), CrdtId(0, 0)),
+        background_visible=LwwValue(CrdtId(0, 0), True),
+        root_document_visible=LwwValue(CrdtId(0, 0), True),
+        paper_size=(CANVAS_W, CANVAS_H),
+    )
 
     native = bool(page.extra.get(FORMAT_ID))
     k, dx, dy = (_native_transform(page) if native
                  else _foreign_transform(page))
 
     layers = [ly for ly in (page.layers or [ir.Layer()]) if ly.visible]
-    item_seq = 20
-    layer_blocks = []
-    for li, layer in enumerate(layers):
-        node = CrdtId(0, 11 + 3 * li)
-        # every layer group must be announced in the scene tree first
+    nodes = [CrdtId(0, 11 + 3 * li) for li in range(len(layers))]
+    for node in nodes:  # every layer group announced in the scene tree first
         yield SceneTreeBlock(tree_id=node, node_id=CrdtId(0, 0),
                              is_update=True, parent_id=CrdtId(0, 1))
+    yield TreeNodeBlock(si.Group(node_id=CrdtId(0, 1)))
+    for li, (node, layer) in enumerate(zip(nodes, layers)):
         yield TreeNodeBlock(si.Group(
             node_id=node,
             label=LwwValue(CrdtId(0, 12 + 3 * li), layer.name or f"Layer {li + 1}"),
         ))
+    for li, node in enumerate(nodes):
         yield SceneGroupItemBlock(
             parent_id=CrdtId(0, 1),
             item=CrdtSequenceItem(
@@ -174,10 +204,12 @@ def page_to_blocks(page: ir.Page, author: uuidlib.UUID | None = None):
                 deleted_length=0, value=node,
             ),
         )
+    item_seq = 20
+    for node, layer in zip(nodes, layers):
         for s in layer.strokes:
             if not s.x:
                 continue
-            layer_blocks.append(SceneLineItemBlock(
+            yield SceneLineItemBlock(
                 parent_id=node,
                 item=CrdtSequenceItem(
                     item_id=CrdtId(1, item_seq),
@@ -185,9 +217,8 @@ def page_to_blocks(page: ir.Page, author: uuidlib.UUID | None = None):
                     deleted_length=0,
                     value=_line_from_stroke(s, k, dx, dy),
                 ),
-            ))
+            )
             item_seq += 1
-    yield from layer_blocks
 
 
 def write_rm_page(page: ir.Page, path_or_buf) -> None:
@@ -264,9 +295,10 @@ class RmdocWriter:
                         "idx": {"timestamp": "2:2",
                                 "value": _fractional_index(i)},
                         "modifed": now,  # (sic — field name as observed)
-                        "template": {"timestamp": "2:1", "value": "Blank"},
+                        "template": {"timestamp": "2:1",
+                                     "value": _page_template(page)},
                     }
-                    for i, pu in enumerate(page_uuids)
+                    for i, (pu, page) in enumerate(zip(page_uuids, doc.pages))
                 ],
                 # CRDT author table mapping the author index used by the
                 # AuthorIdsBlock in each .rm payload
@@ -301,6 +333,11 @@ class RmdocWriter:
                         json.dumps({"contentFormatVersion": 2}, indent=4))
             for pu, payload in zip(page_uuids, rm_payloads):
                 zf.writestr(f"{doc_uuid}/{pu}.rm", payload)
+
+
+def _page_template(page: ir.Page) -> str:
+    """Native round-trips keep the source page's template name."""
+    return (page.extra.get(FORMAT_ID) or {}).get("template") or "Blank"
 
 
 def _fractional_index(i: int) -> str:
