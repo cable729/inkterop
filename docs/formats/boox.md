@@ -148,6 +148,11 @@ within a layer, orphans in a trailing layer `[inferred]`.
 
 ## Open questions
 
+0. Erase representation: `stash/` (undo history) is ignored, but the
+   reader keeps points that lack a shape record as orphan default-style
+   ink — if erasing removes the shape but leaves the `#points` entry,
+   erased strokes would resurrect. Needs an erased sample
+   (`docs/erase-audit.md`).
 1. `#points` header u32 — version or page count? Only 1 observed.
 2. `tilt_y` semantics/units (elevation 15-33 observed on charcoal).
 3. Pen-type completeness — only 2/5/15/21/22/60/61 observed in samples;

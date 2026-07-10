@@ -272,7 +272,10 @@ Modern `.ntb`:
 6. Editing semantics of the op log: what erase/move/undo ops look like
    (the sample only contains create + add-stroke ops), and whether ops
    ever supersede earlier ones — matters before trusting "read every
-   type-15 op" on edited notes.
+   type-15 op" on edited notes. Status 2026-07-10: the freshly-drawn
+   calibration note is clean (all 70 parsed strokes render in the app's
+   own PDF export — `docs/erase-audit.md`), but an ERASED corpus case is
+   still needed before edited notes can be trusted.
 7. Text objects, PDF backgrounds, images, audio in .ntb; multi-page /
    section notes.
 8. Write support: an experimental writer exists (see ".ntb writer"

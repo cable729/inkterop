@@ -66,6 +66,16 @@ analysis-notes.md alongside). Fallout landed the same day:
   9-float sample pairs with tilt columns (sec-1 flag bit 2) — the
   triplet misparse had been injecting phantom points. Per-style table
   in `docs/calibration-results.md`; spec in `docs/formats/goodnotes.md`.
+- **Erased-stroke audit DONE 2026-07-10** (`docs/erase-audit.md`,
+  reproduce via `core/scripts/erase_audit.py`): every reader checked
+  for erased-ink leakage; the four calibration apps verified stroke-by-
+  stroke against their own PDF exports (all clean). Notable: GoodNotes
+  REMOVES erased ink records (its field-14=1 records looked like
+  tombstones but are NOT — a trial implementation dropped visible
+  strokes and was reverted); rM v6 value=None CRDT tombstones and Nebo
+  -1-word tombstones are skipped correctly; excalidraw isDeleted
+  skipped. Open erase risks: Notability edited-note ops (unmapped),
+  Boox orphan points, PencilKit partial-erase masks.
 - **IN FLIGHT (2026-07-10, separate session/worktree): GoodNotes
   events-only page replay** (0-byte notes/ blob, strokes only in
   index.events.pb). Check for its branch/commits before starting;

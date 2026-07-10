@@ -136,6 +136,10 @@ embedded blobs carry the same `wrd\xf0` container is untested here
 
 ## Open questions
 
+0. Partial erases: PencilKit's pixel eraser applies a per-stroke mask
+   (`PKStroke.mask`) rather than deleting the stroke — no field decoded
+   for it yet, so a partially-erased stroke would render in full. Needs
+   a sample drawn + partially erased (`docs/erase-audit.md`).
 1. Channel bits 4 and 10 (u16, always 0 — barrel roll / future Pencil
    channels? not settable via public API on macOS).
 2. Precise CRDT semantics of fields 3/7/5.2/5.3 (layout known, member

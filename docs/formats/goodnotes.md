@@ -90,7 +90,7 @@ shape change).
 | 6 | bytes | often empty | `[unknown]` |
 | 7 | message | **identity, NOT pen type**: subfield 1 = {1: per-page draw-order index, 2: random u32 nonce} — same shape as the field-15 version msg. Duplicate indices appear when an item is updated/erased | `[verified]` (2026-07-10; the earlier "pen-type id" reading was a draw-order coincidence on a one-stroke-per-tool page) |
 | 9 | bytes | empty on ink; non-empty on shape strokes | `[unknown]` |
-| 14 | varint | 1 on empty-geometry re-records of an existing index → erase/update tombstone? | `[inferred]` (2026-07-10) |
+| 14 | varint | 1 on empty-geometry re-records of an existing index — **NOT an erase marker**: the app still renders the item's ink record (checked point-by-point against the app's own PDF export). Meaning open | `[verified not-erase 2026-07-10]`, semantics `[unknown]` |
 | 15 | message | {1: version, 2: nonce} — echoes the journal header's field 2 | `[verified]` |
 | 20 | bytes | empty bytes on ink strokes; **{1: ""} submessage = marker** (see "Pen style") | `[verified]` (2026-07-10) |
 | 21 | varint | schema version (24/25) | `[inferred]` |
@@ -305,10 +305,17 @@ Mac app-import check passes (docs/validated-writes.md). What it emits:
    the mixed-pens fixture page is wider than A4) — case 14.
 4. Shape-tool geometry location (shape strokes have empty inline
    geometry + non-empty field 9) — case 09.
-5. Eraser representation — case 08. Candidate found 2026-07-10: an
-   empty-geometry re-record of an existing draw index with stroke field
-   14 = 1 (tombstone?); the reader does not yet honor it — erased
-   strokes may still render.
+5. ~~Eraser representation~~ RESOLVED 2026-07-10: **erased strokes are
+   removed from the page file** — a color-aware point-by-point check
+   found every one of the calibration page's 86 ink records rendered in
+   the app's own PDF export, so the file holds only visible ink and the
+   reader needs no erase handling `[verified]`. (The empty field-14=1
+   re-records looked like tombstones but are NOT — the app renders
+   those items' ink; a trial tombstone implementation wrongly dropped
+   2 visible strokes and was reverted. Their real meaning is
+   `[unknown]`.) Still open: how PARTIAL erases are stored (likely the
+   stroke is split into replacement records) — needs a controlled
+   sample (case 08).
 6. Images & text boxes — cases 10, 11.
 7. PDF background linkage (attachments ↔ pages) — case 12.
 8. index.events.pb / index.search.pb / document.info.pb contents.
@@ -320,6 +327,12 @@ Mac app-import check passes (docs/validated-writes.md). What it emits:
 
 ## Changelog
 
+- 2026-07-10 (erase audit): erasure semantics settled — GoodNotes
+  REMOVES erased strokes from the page file (all 86 calibration ink
+  records verified rendered in the app's own export, color-aware
+  point sampling), so the reader is already erase-correct. Field-14=1
+  empty re-records are NOT erase tombstones (app renders those items);
+  their meaning stays [unknown].
 - 2026-07-10 (iPad calibration page): PEN STYLES decoded — stroke field 3
   (0 ball / 1 pressure / 5 pencil) + field 5 (highlighter) + field 20
   ({1: ""} = marker); stroke field 7 exposed as an {index, nonce}

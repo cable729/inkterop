@@ -112,6 +112,10 @@ pikepdf and set `/BM /Darken` on the highlighter ExtGState.
   — harmless (unknown blocks preserved); don't treat as failure.
 - Pages with no drawn content have no `.rm` file → emit a blank page.
 - `cPages.pages[]` entries with a `deleted` key are deleted pages — skip.
+- Erased strokes persist in v6 files as CRDT sequence items with
+  `value=None` — the reader's Group/Line isinstance walk skips them
+  `[verified: calibration page carries one; whole-library golden renders
+  match official exports]`. See `docs/erase-audit.md`.
 - Text blocks (typed text) exist in v6 (rmscene `root_text`); we use them
   only for stroke anchor positions so far, not rendered.
 

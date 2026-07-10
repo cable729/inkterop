@@ -127,6 +127,15 @@ wrong page size (Letter vs A4), which currently sinks the registered
 visualdiff vs the app's PDF export (~17% ink-match, pure
 misregistration — spun off as a background task).
 
+### Erased-stroke audit (2026-07-10)
+
+The calibration pairs double as an erase oracle: every stroke our
+readers parse was mapped point-by-point into the app's own PDF export
+(`core/scripts/erase_audit.py`). GoodNotes/Notability/Saber/Nebo all
+came back clean — no reader renders ink its app hides. Full per-format
+table (including the GoodNotes false-tombstone refutation and the open
+Notability/Boox/PencilKit erase risks): `docs/erase-audit.md`.
+
 ### Open questions raised
 
 1. Nebo: does a HIGHLIGHT_STROKES / brush tag legally cover a RUN of
