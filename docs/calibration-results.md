@@ -52,7 +52,23 @@ baseline stroke **verified R-before-G color byte order** (doc updated;
 .ntb writer validation ungated).
 
 **GoodNotes** (journal-25 export): per-point widths only (0.09–24.0).
-Two reader gaps found — see "In-flight work" below.
+Pen styles DECODED off this page 2026-07-10 (stroke fields 3/5/20 —
+`docs/formats/goodnotes.md` "Pen style"); the rows also exposed and
+fixed a path-layout misparse (iPad pressure strokes are 9-float sample
+pairs with tilt columns, flagged by sec-1 bit 2, not flat triplets).
+Per-style stats (rerun via the snippet pattern in calib_summary.py):
+
+| UI tool | IR family (native style) | n | width |
+|---|---|---|---|
+| fountain + brush + freehand | pen ("pressure") | 55 | 0.09–4.03, pressure baked in |
+| ball pen | ballpoint | 8 | const 1.56 |
+| pencil | pencil | 7 | const 1.56 (real per-point tilt angles) |
+| highlighter | highlighter | 8 | const 24.0 |
+| marker | marker | 8 | const 18.0 (opaque, drop-shadow render) |
+
+Fountain vs brush is NOT stored per stroke (verified — all fields
+identical); the page's marker row is red and there is no separate red
+baseline stroke. Remaining reader gap: events-only pages (below).
 
 **Nebo** (iPad 7.4.3, Apple Pencil): first sample with real force data
 (all capacitive corpus was f=255). Constant appearance width from brush
@@ -130,8 +146,9 @@ misregistration — spun off as a background task).
    GoodNotes have only PDF exports — measure via the content-stream
    dump used by the golden tests; Saber can also be read from its
    open-source renderer.
-2. GoodNotes per-style analysis is blocked on the two reader gaps
-   (below), then redo the per-tool table per pen style.
+2. ~~GoodNotes per-style analysis blocked on reader gaps~~ per-style
+   table added above (2026-07-10); the events-only page 1 still hides
+   its strokes from the width stats.
 
 ## In-flight work (started 2026-07-10, separate sessions/worktrees)
 
@@ -142,8 +159,8 @@ branches/results before re-attempting:
    contain a 0-byte `notes/<uuid>` blob with the page's strokes living
    only in `index.events.pb`; the reader needs event replay (page 1 of
    `corpus/calibration/goodnotes-calibration.goodnotes` reproduces).
-2. **Decode GoodNotes pen-style records** — all strokes currently map
-   to generic PEN with empty params; style lives in the undecoded
-   stroke/tpl sections (page 2 of the calibration notebook has
-   fountain/ball/brush/highlighter/size-extreme/red rows to RE
-   against).
+2. ~~Decode GoodNotes pen-style records~~ **DONE 2026-07-10** (this
+   branch): styles live in stroke fields 3/5/20, not the tpl sections
+   or field 7 (which is an {index, nonce} identity msg — the old
+   pen-type table was a draw-order coincidence). Mapping + geometry
+   fix documented in `docs/formats/goodnotes.md`.

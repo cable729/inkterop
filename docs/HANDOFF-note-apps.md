@@ -58,10 +58,18 @@ analysis-notes.md alongside). Fallout landed the same day:
   width, marker/pencil/ballpoint strongly pressure-coupled,
   calligraphy likely tilt-driven; Nebo law now fittable vs its SVG).
   Rerun numbers: `core/scripts/calib_summary.py`.
-- **IN FLIGHT (2026-07-10, separate sessions/worktrees): both GoodNotes
-  reader gaps** — events-only page replay and pen-style/tpl decode —
-  were spawned as background sessions. Check for their branches/
-  commits before starting either; integrate rather than redo.
+- **GoodNotes pen styles: DONE 2026-07-10** (this branch) — styles are
+  stroke fields 3/5/20 (ball/pressure/pencil + highlighter + marker),
+  NOT field 7 (an {index, nonce} identity msg; the old pen-type table
+  was a draw-order coincidence) and not the tpl sections. Fountain vs
+  brush is not stored per stroke. Bonus fix: iPad pressure strokes are
+  9-float sample pairs with tilt columns (sec-1 flag bit 2) — the
+  triplet misparse had been injecting phantom points. Per-style table
+  in `docs/calibration-results.md`; spec in `docs/formats/goodnotes.md`.
+- **IN FLIGHT (2026-07-10, separate session/worktree): GoodNotes
+  events-only page replay** (0-byte notes/ blob, strokes only in
+  index.events.pb). Check for its branch/commits before starting;
+  integrate rather than redo.
 
 ## What landed (this branch)
 
