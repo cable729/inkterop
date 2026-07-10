@@ -1,13 +1,17 @@
 # Wacom Universal Ink Model (.uim) format
 
-Status: **read support (UIM v3.0.0 and v3.1.0)**. Independent stdlib-only
-implementation; format facts and protobuf field numbers derived from
-Wacom's Apache-2.0 reference implementation
+Status: **read support (UIM v3.0.0 and v3.1.0) + write support (v3.1.0)**.
+Independent stdlib-only implementation; format facts and protobuf field
+numbers derived from Wacom's Apache-2.0 reference implementation
 ([universal-ink-library](https://github.com/Wacom-Developer/universal-ink-library),
 `uim/codec/parser/` + generated schema in `uim/codec/format/`) and the
-public spec at developer-docs.wacom.com. Verified against all 11 corpus
-samples (5x v3.0.0, 6x v3.1.0) and oracle-tested numerically against the
-Wacom library's own parse (`tests/test_uim.py`). `.will` (WILL-2) is a
+public spec at developer-docs.wacom.com. Reader verified against all 11
+corpus samples (5x v3.0.0, 6x v3.1.0) and oracle-tested numerically
+against the Wacom library's own parse (`tests/test_uim.py`). Writer
+(`encode_uim`, 2026-07-09) oracle-tested both directions: everything it
+emits parses in Wacom's own library, and re-encoding every corpus file
+round-trips with identical stroke/point counts and xy deltas within the
+float32 quantum (`tests/test_uim_writer.py`). `.will` (WILL-2) is a
 different container and NOT handled.
 
 ## Container `[verified]`
@@ -116,6 +120,58 @@ compression quantum `[verified]`.
   brushes → PEN, raster (particle) brushes → UNKNOWN; the URI and render
   mode ride along in NativeTool params.
 
+## Writer (`encode_uim`) and the IR↔UIM feature-fit matrix
+
+`encode_uim(doc, page_index)` emits one IR page as a RIFF UINK v3.1.0
+file (chunks PRPS/INPT/BRSH/INKD/INKS — INKS is not optional: Wacom's
+`InkModel.strokes` only walks the ink tree, so a file without it parses
+but appears empty). Output is byte-deterministic (uuid5 stroke ids,
+`SensorData.timestamp = 0`). Coordinates are DIPs:
+`dip = source_units × page.point_scale / 0.75`, one factor applied to
+x, y, the WIDTH channel and `appearance.width` alike. Strokes are all
+layers in layer order, **including invisible layers** — the writer is a
+container/interchange encoder, not a renderer, and must not drop content.
+
+The matrix below is the evidence base for the interchange-format
+decision ("does the IR translate cleanly into UIM"). Fit levels:
+**1:1** (native slot) / **convention** (works via a documented
+vocabulary, foreign readers may not honor it) / **properties-hack**
+(rides in PRPS key/values) / **no-fit** (dropped; carried by the .inkz
+overlay instead — see `docs/formats/inkz.md`).
+
+| IR concept | Fit | Detail |
+|---|---|---|
+| Raw PRESSURE / TILT_AZIMUTH / TILT_ALTITUDE / TIMESTAMP | **1:1** | native sensor channels, zigzag deltas; quantization ≤ 5e-5 (precision 4) / 0.5 ms; Pressure declares min 0 / max 1 so read-back normalization is the identity |
+| Raw SPEED | no-fit | no UIM channel URI; dropped (derivable from X/Y+TIMESTAMP) |
+| Resolved WIDTH (per point) | **1:1** | `SplineData.size` incl. phantom endpoints; constant width → `PathPointProperties.size` |
+| Resolved ALPHA (per point) | **1:1** | `SplineData.alpha` uint8 (1/255 quantization); stroke opacity → properties color alpha byte |
+| Tool identity | convention | `inkterop://brush/<family>` brush vocabulary; exact round-trip through our reader; foreign readers only get the "highlight" substring heuristic; same-format brush URIs pass through verbatim from `NativeTool` |
+| Nib shape | no-fit (today) | writer emits a fixed Circle `BrushPrototype`; UIM *can* model polygon nibs — revisit when a measured rendering rule needs it |
+| Texture / particle look | no-fit (today) | raster (particle) brushes unused; the IR has no texture concept yet either — the gap is mutual |
+| Blend / underlay | convention | not encoded; reconstructed on read from the highlighter family (multiply + underlay) |
+| Native payload (foreign) | properties-hack | PRPS `inkterop.native.<stroke-id>` = base64 JSON of NativeTool+extra, capped at 2 KiB; not consumed on read (the .inkz overlay is the real carrier) |
+| Backgrounds (template/PDF/image/color) | no-fit | UIM has no page concept — this is the .inkz manifest's job |
+| Typed text blocks | no-fit | dropped (KNWG holds *recognized* text, not typed layout) |
+| Multi-page | convention | one UIM file per page (`out.uim`, `out-2.uim`, …); page index/count in the `inkterop.doc` PRPS entry |
+| point_scale / bounds | properties-hack | geometry lands in DIPs; the reader re-derives bounds from ink extent at fixed 0.75; true bounds/point_scale recorded in `inkterop.doc` but not consumed (the .inkz manifest is authoritative) |
+| Layers | no-fit | flattened in layer order (INKS tree kept flat); layer structure reconstructed by the .inkz manifest |
+
+**Verdict for the interchange decision (2026-07-09)**: the *stroke-level*
+model fits well — channels, resolved width/alpha and geometry are 1:1
+with only float32/uint8 quantization; tool identity works by vocabulary.
+Everything document-level (pages, backgrounds, text, layers) has no UIM
+home, which is exactly the wrapper role the `.inkz` container fills. The
+two expressiveness gaps UIM was expected to close (nib shape, texture)
+are unused so far because the IR itself can't express them yet — they
+stay open until a measured per-app rendering rule demands them.
+
+Encoding notes worth keeping: proto3 zero-defaults make a properties
+color of exactly 0x00000000 wire-indistinguishable from "absent"; the
+writer force-emits the field to match the reader's presence check. The
+writer emits `appearance.color` (render color); a source whose semantic
+color differs loses the distinction through UIM alone (the .inkz overlay
+preserves it).
+
 ## Open questions
 
 1. `KNWG` semantic triples (handwriting recognition text, entities) —
@@ -134,3 +190,8 @@ compression quantum `[verified]`.
 
 - 2026-07-09: initial reader (3.0.0 + 3.1.0), fixture generated with the
   Wacom reference encoder, oracle tests vs the Wacom parser.
+- 2026-07-09 (later): v3.1 writer (`encode_uim` + `UimWriter`,
+  `validated=True` under the open-format exception), oracle-tested both
+  directions against the Wacom library; reader's `_tool_family` now maps
+  the `inkterop://brush/<family>` vocabulary back to exact families;
+  feature-fit matrix added (interchange-decision evidence).
