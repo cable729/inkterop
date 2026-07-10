@@ -34,6 +34,11 @@ def main(argv: list[str] | None = None) -> int:
                    help="allow writers not yet validated against their app")
     c.add_argument("--force", action="store_true",
                    help="skip output-path safety checks")
+    c.add_argument("--normalize", choices=["uniform", "native"],
+                   default=None,
+                   help="PDF/PNG page sizing: uniform (fixed target page, "
+                        "the mirror default) or native (source page size — "
+                        "use for cross-app fidelity comparisons)")
     v = sub.add_parser("visualdiff",
                        help="pixel-compare two PDFs page by page")
     v.add_argument("a", type=Path, help="reference PDF")
@@ -75,11 +80,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "convert":
         from .convert import ConvertError, convert
         from .formats.base import Fidelity
+        options = None
+        if args.normalize:
+            from .render.pdf import RenderConfig
+            options = {"render_config": RenderConfig(normalize=args.normalize)}
         try:
             convert(Path(args.input), args.output,
                     fidelity=Fidelity(args.fidelity), pages=args.pages,
                     experimental=args.experimental, force=args.force,
-                    cache_dir=args.cache_dir)
+                    cache_dir=args.cache_dir, options=options)
         except ConvertError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
