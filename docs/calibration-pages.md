@@ -1,5 +1,8 @@
 # iPad calibration pages — drawing script
 
+> Results so far: `docs/calibration-results.md` (round 1 landed
+> 2026-07-10, all five apps).
+
 One page per app, ~2–3 minutes each. These pages measure each app's
 *rendering rule* (how pen channels + tool settings become on-screen
 width/opacity), which is what makes strokes look right when converted

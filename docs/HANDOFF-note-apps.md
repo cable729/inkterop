@@ -53,10 +53,15 @@ analysis-notes.md alongside). Fallout landed the same day:
   blob (strokes live only in index.events.pb — needs event replay in
   the READER), and pen-style records aren't decoded (all strokes
   generic pen). Both block per-style calibration analysis.
-- First-pass per-tool channel stats in
-  `corpus/calibration/analysis-notes.md` (rM: fineliner/highlighter
-  constant width, marker/pencil/ballpoint strongly pressure-coupled,
+- First-pass per-tool channel stats + next fitting steps:
+  `docs/calibration-results.md` (rM: fineliner/highlighter constant
+  width, marker/pencil/ballpoint strongly pressure-coupled,
   calligraphy likely tilt-driven; Nebo law now fittable vs its SVG).
+  Rerun numbers: `core/scripts/calib_summary.py`.
+- **IN FLIGHT (2026-07-10, separate sessions/worktrees): both GoodNotes
+  reader gaps** — events-only page replay and pen-style/tpl decode —
+  were spawned as background sessions. Check for their branches/
+  commits before starting either; integrate rather than redo.
 
 ## What landed (this branch)
 
