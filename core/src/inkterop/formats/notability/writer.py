@@ -147,6 +147,11 @@ def _rgba(s: ir.Stroke, fidelity: Fidelity, tool: int) -> bytes:
             alpha = native.params.get("alpha")
         if alpha is None:
             alpha = HIGHLIGHTER_ALPHA if tool == 2 else 1.0
+    alphas = s.channels.get(ir.Channel.ALPHA)
+    if alphas and fidelity is not Fidelity.NATIVE:
+        # per-point alpha (reMarkable pencil texture) flattens to its
+        # median — .ntb has one RGBA per stroke
+        alpha = median(alphas)
     to_byte = (lambda v: round(min(max(v, 0.0), 1.0) * 255))
     return bytes([to_byte(color.r), to_byte(color.g), to_byte(color.b),
                   to_byte(alpha)])
@@ -230,7 +235,12 @@ def document_to_note_bundle(doc: ir.Document,
 
     created = int(doc.metadata.get("created_unix_ms")
                   or time.time() * 1000)
-    uid = str(doc.metadata.get("notability_uuid") or uuid.uuid4()).lower()
+    # ALWAYS a fresh note UUID: the app refuses to import a note whose
+    # UUID it already has (observed 2026-07-09 — files carrying the
+    # fixture's original UUID failed with "FlatbuffersErrors error 0"
+    # after the fixture itself was imported, while an otherwise-identical
+    # fresh-UUID file imported fine).
+    uid = str(uuid.uuid4()).lower()
 
     fb = FbBuilder()
     ops = [

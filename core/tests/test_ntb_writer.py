@@ -319,7 +319,13 @@ def test_fixture_round_trip(tmp_path):
 
     assert back.title == src.title
     assert back.metadata["created_unix_ms"] == src.metadata["created_unix_ms"]
-    assert back.metadata["notability_uuid"] == src.metadata["notability_uuid"]
+    # note UUID is deliberately regenerated on write: the app refuses to
+    # import a duplicate note UUID (validated-writes.md, 2026-07-09)
+    import uuid as uuidlib
+
+    assert uuidlib.UUID(back.metadata["notability_uuid"])
+    assert (back.metadata["notability_uuid"]
+            != src.metadata["notability_uuid"])
 
 
 def test_written_container_mirrors_fixture(tmp_path):

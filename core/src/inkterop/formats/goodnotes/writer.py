@@ -182,6 +182,73 @@ def _thumbnail_jpeg() -> bytes:
     return buf.getvalue()
 
 
+def _write_double(number: int, value: float) -> bytes:
+    import struct as _struct
+
+    from .wire import write_tag
+
+    return write_tag(number, 1) + _struct.pack("<d", value)
+
+
+def _nonce_msg(field: int, rng) -> bytes:
+    """{f1: 1, f2: random u32} version-vector entry, as observed."""
+    return write_len_delimited(field, write_varint_field(1, 1)
+                               + write_varint_field(2, rng.getrandbits(31)))
+
+
+def _events_log(doc_uuid: str, title: str, first_page_uuid: str,
+                att_uuid: str, att_size: int, now_ms: int) -> bytes:
+    """Minimal index.events.pb: a document-created event + an
+    attachment-added event, mirroring the first two records of the Mac
+    export (schema decoded schema-less; field meanings [inferred]).
+    Without this member GoodNotes rejects the import with "missing
+    document id" — the document UUID lives ONLY here.
+    """
+    import random
+    import struct as _struct
+
+    rng = random.Random()
+    device_id = rng.getrandbits(62)
+
+    created = write_len_delimited(1, doc_uuid.encode("ascii")) + \
+        write_len_delimited(30, b"".join([
+            write_len_delimited(1, doc_uuid.encode("ascii")),
+            write_len_delimited(2, write_len_delimited(
+                1, title.encode("utf-8")) + _nonce_msg(2, rng)),
+            write_len_delimited(3, write_len_delimited(
+                1, first_page_uuid.encode("ascii")) + _nonce_msg(2, rng)),
+            write_len_delimited(6, write_len_delimited(1, b"P")
+                                + _nonce_msg(2, rng)),
+            write_len_delimited(7, write_len_delimited(
+                1, first_page_uuid.encode("ascii")) + _nonce_msg(2, rng)),
+            write_len_delimited(9, b"auto"),
+            _write_double(10, float(now_ms)),
+            write_len_delimited(11, str(uuid.uuid4()).upper().encode()),
+            write_varint_field(13, device_id),
+            write_varint_field(14, now_ms),
+            write_len_delimited(17, b""),
+            write_len_delimited(18, b""),
+            write_len_delimited(19, _nonce_msg(2, rng)),
+            write_varint_field(20, SCHEMA_VERSION),
+        ]))
+
+    attached = write_len_delimited(1, att_uuid.encode("ascii")) + \
+        write_len_delimited(6, b"".join([
+            write_len_delimited(1, att_uuid.encode("ascii")),
+            write_len_delimited(2, att_uuid.encode("ascii")),
+            write_varint_field(5, att_size),
+            write_len_delimited(6, doc_uuid.encode("ascii")),
+            _write_double(10, float(now_ms)),
+            write_len_delimited(11, str(uuid.uuid4()).upper().encode()),
+            write_len_delimited(12, write_varint_field(1, 1)
+                                + write_varint_field(2, 1)),
+            write_varint_field(14, device_id),
+            write_varint_field(15, now_ms),
+            write_varint_field(16, SCHEMA_VERSION),
+        ]))
+    return join_delimited([created, attached])
+
+
 def _blank_pdf(width_pt: float, height_pt: float) -> bytes:
     """Blank one-page PDF, the shape GoodNotes stores paper backgrounds
     in as `attachments/<uuid>`."""
@@ -226,9 +293,16 @@ def document_to_goodnotes(doc: ir.Document,
         ])
 
     att_uuid = str(uuid.uuid4()).upper()
+    doc_uuid = str(uuid.uuid4()).upper()
     first = doc.pages[0].bounds if doc.pages else None
     page_w = first.width if first else 595.0
     page_h = first.height if first else 842.0
+    pdf = _blank_pdf(page_w, page_h)
+    import time as _time
+
+    events = _events_log(doc_uuid, doc.title or "inkterop export",
+                         pages[0][0] if pages else str(uuid.uuid4()).upper(),
+                         att_uuid, len(pdf), int(_time.time() * 1000))
 
     buf = io.BytesIO()
     # member order mirrors the observed Mac export
@@ -244,11 +318,11 @@ def document_to_goodnotes(doc: ir.Document,
                                     + write_len_delimited(3, b"")]))
         for page_uuid, data in pages:
             zf.writestr(f"notes/{page_uuid}", data)
-        zf.writestr("index.events.pb", b"")
+        zf.writestr("index.events.pb", events)
         zf.writestr("thumbnail.jpg", _thumbnail_jpeg())
         zf.writestr("index.attachments.pb",
                     _index([(att_uuid, f"attachments/{att_uuid}", False)]))
-        zf.writestr(f"attachments/{att_uuid}", _blank_pdf(page_w, page_h))
+        zf.writestr(f"attachments/{att_uuid}", pdf)
         zf.writestr("schema.pb", write_varint_field(1, SCHEMA_VERSION))
     return buf.getvalue()
 

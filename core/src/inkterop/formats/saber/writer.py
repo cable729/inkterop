@@ -132,6 +132,11 @@ def _stroke_doc(s: ir.Stroke, k: float, x0: float, y0: float,
     else:
         is_hl = s.tool is not None and s.tool.family is ir.ToolFamily.HIGHLIGHTER
         color, opacity = s.color, (0.5 if is_hl else 1.0)
+    alphas = s.channels.get(ir.Channel.ALPHA)
+    if alphas:
+        # per-point alpha (e.g. reMarkable pencil texture) flattens to
+        # its median — Saber has one ARGB per stroke
+        opacity = median(alphas)
 
     out = {
         "shape": None,
