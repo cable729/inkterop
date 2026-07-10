@@ -161,15 +161,16 @@ Notability/Boox/PencilKit erase risks): `docs/erase-audit.md`.
 
 ## In-flight work (started 2026-07-10, separate sessions/worktrees)
 
-Two background sessions were spawned off this analysis — check their
-branches/results before re-attempting:
+Both background sessions spawned off this analysis are DONE and merged
+to main (nothing GoodNotes-related is in flight):
 
-1. **Decode GoodNotes events-only pages in reader** — exports can
-   contain a 0-byte `notes/<uuid>` blob with the page's strokes living
-   only in `index.events.pb`; the reader needs event replay (page 1 of
-   `corpus/calibration/goodnotes-calibration.goodnotes` reproduces).
-2. ~~Decode GoodNotes pen-style records~~ **DONE 2026-07-10** (this
-   branch): styles live in stroke fields 3/5/20, not the tpl sections
+1. ~~Decode GoodNotes events-only pages~~ **DONE 2026-07-10** (f29e3d2):
+   the events log holds NO stroke geometry (field 106 = stroke-uuid
+   version vector; the calibration 0-byte page is genuinely blank).
+   Landed instead: events-log page replay (list/order/paper size —
+   page dims resolved) + single-segment pencil-dot recovery.
+2. ~~Decode GoodNotes pen-style records~~ **DONE 2026-07-10** (39104f3):
+   styles live in stroke fields 3/5/20, not the tpl sections
    or field 7 (which is an {index, nonce} identity msg — the old
    pen-type table was a draw-order coincidence). Mapping + geometry
    fix documented in `docs/formats/goodnotes.md`.

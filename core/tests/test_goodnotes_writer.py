@@ -246,6 +246,46 @@ def test_writer_container_members(tmp_path):
         assert zf.read("thumbnail.jpg")[:2] == b"\xff\xd8"  # JPEG SOI
 
 
+def test_reader_materializes_page_from_events(tmp_path):
+    """A page whose notes/ blob is missing still exists: the reader
+    replays it from index.events.pb (page-created event + paper size)."""
+    pen = ir.Stroke(
+        x=[10.0, 60.0, 110.0], y=[20.0, 25.0, 20.0],
+        tool=ir.ToolRef(family=ir.ToolFamily.PEN),
+        color=ir.Color(0.0, 0.0, 0.0),
+        channels={ir.Channel.WIDTH: [1.0, 2.0, 1.5]},
+    )
+    src = ir.Document(format_id="test", title="events", pages=[
+        ir.Page(bounds=ir.Rect(0.0, 0.0, 700.0, 900.0), point_scale=1.0,
+                layers=[ir.Layer(strokes=[pen])]),
+        ir.Page(bounds=ir.Rect(0.0, 0.0, 700.0, 900.0), point_scale=1.0,
+                layers=[ir.Layer(strokes=[])]),
+    ])
+    out = tmp_path / "events.goodnotes"
+    GoodnotesWriter().write(src, out, Fidelity.EXACT)
+
+    with zipfile.ZipFile(out) as zf:
+        page_uuids = [n.removeprefix("notes/") for n in zf.namelist()
+                      if n.startswith("notes/")]
+        members = {n: zf.read(n) for n in zf.namelist()}
+    assert len(page_uuids) == 2
+    del members[f"notes/{page_uuids[1]}"]
+    gutted = tmp_path / "gutted.goodnotes"
+    with zipfile.ZipFile(gutted, "w") as zf:
+        for name, data in members.items():
+            zf.writestr(name, data)
+
+    back = GoodnotesReader().read(gutted)
+    assert len(back.pages) == 2
+    assert len(list(back.pages[0].strokes())) == 1
+    p2 = back.pages[1]
+    assert p2.extra["goodnotes"]["page_uuid"] == page_uuids[1]
+    assert not list(p2.strokes())
+    # paper size replayed from the events journal, not the A4 fallback
+    assert p2.bounds.width == pytest.approx(700.0, abs=0.01)
+    assert p2.bounds.height == pytest.approx(900.0, abs=0.01)
+
+
 # --- fixture round-trip ---------------------------------------------------------
 
 def test_writer_fixture_round_trip(tmp_path):

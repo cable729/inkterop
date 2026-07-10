@@ -2,16 +2,20 @@
 
 Status: **ink strokes + color + PEN STYLES decoded across both schema
 versions (ball/pressure/pencil/marker/highlighter — see "Pen style");
-schema-25 journal structure + events-log page model decoded; same-format
-round-trip imports and renders in GoodNotes Mac (2026-07-09 round 3)**.
+schema-25 journal structure + events-log page model decoded AND
+replayed by the reader (page list/order/paper size; empty notes blobs
+materialize); same-format round-trip imports and renders in GoodNotes
+Mac (2026-07-09 round 3)**.
 Verified against public GoodNotes 6 samples (schema 24), a controlled
 Mac-app export (GoodNotes 6, Mac App Store, 2026-07-09, schema 25 —
 committed as `core/tests/fixtures/goodnotes/gn-mac-mixed-pens.goodnotes`),
 AND the iPad calibration page (GoodNotes 7.1.2 iPad export, 2026-07-10,
 `corpus/calibration/goodnotes-calibration.goodnotes`, 91 stroke records
 drawn per `docs/calibration-pages.md`). Open: fountain-vs-brush (not
-stored per stroke), erasers, images, text, page dims, shape geometry,
-events-only pages.
+stored per stroke), erasers, images, text, shape geometry. ("Events-only
+pages" is a non-issue: the events log stores NO stroke geometry — the
+calibration file's empty-blob page is genuinely blank, confirmed against
+the app's own PDF export.)
 
 Confidence markers: `[verified]` = confirmed by decoding real files with
 independent code and checking invariants; `[inferred]` = consistent with
@@ -90,7 +94,7 @@ shape change).
 | 6 | bytes | often empty | `[unknown]` |
 | 7 | message | **identity, NOT pen type**: subfield 1 = {1: per-page draw-order index, 2: random u32 nonce} — same shape as the field-15 version msg. Duplicate indices appear when an item is updated/erased | `[verified]` (2026-07-10; the earlier "pen-type id" reading was a draw-order coincidence on a one-stroke-per-tool page) |
 | 9 | bytes | empty on ink; non-empty on shape strokes | `[unknown]` |
-| 14 | varint | 1 on empty-geometry re-records of an existing index — **NOT an erase marker**: the app still renders the item's ink record (checked point-by-point against the app's own PDF export). Meaning open | `[verified not-erase 2026-07-10]`, semantics `[unknown]` |
+| 14 | varint | 1 on empty-geometry re-records of an existing index — **NOT an erase marker**: the app still renders the item's ink record (checked point-by-point against the app's own PDF export). Their field-106 version-vector entries carry bumped counters (3–61 vs 2 on untouched strokes in the calibration file). Meaning open | `[verified not-erase 2026-07-10]`, semantics `[unknown]` |
 | 15 | message | {1: version, 2: nonce} — echoes the journal header's field 2 | `[verified]` |
 | 20 | bytes | empty bytes on ink strokes; **{1: ""} submessage = marker** (see "Pen style") | `[verified]` (2026-07-10) |
 | 21 | varint | schema version (24/25) | `[inferred]` |
@@ -195,15 +199,20 @@ physical tilt), smoothly varying per point on the iPad calibration page
   the path is all samples in order. A 9-float array is divisible by 3
   too; parsing it as triplets yields phantom points from the tilt
   columns (reader bug fixed 2026-07-10 — the flag bit decides).
+- **Dots** are a single segment struct (2 points) — length-1 pencil
+  segment arrays are valid paths `[verified 2026-07-10]` (the
+  calibration pencil dot stores one 11-float struct).
 - Sub-path breaks appear as (~0, ~0, w) sentinel points in either layout.
 - Widths are device-rendered with pressure baked in (like reMarkable);
   never re-derive from pressure.
 
 ## Coordinates & units `[verified]`
 
-PDF points @ 72 dpi, origin top-left, y down. Observed pages are A4
-(595.28 × 841.89 pt); the page-dimension field is `[unknown]` — our reader
-assumes A4 until the corpus isolates it (case 14). Width per point is the
+PDF points @ 72 dpi, origin top-left, y down. **Page dimensions live in
+the events journal's paper-definition records** (field 8: float32 w, h —
+834.24 × 1078.825 pt for the "standard" paper) `[verified 2026-07-10]`;
+the reader replays them and assumes A4 only when no events log is
+present. Width per point is the
 **device-rendered width with pressure baked in** (thin pressure pens
 ~0.1–1.4 pt, thick pens ~3–4.5 pt) — same design as reMarkable Paper Pro's
 `point.width/4`. Do not layer pressure formulas on top.
@@ -220,7 +229,12 @@ falls back to zip order.
 experimental. Emits IR strokes with a WIDTH channel; tool families map
 per the "Pen style" table (fountain/brush → PEN with native style
 `"pressure"`), constant-width pens get `STROKED_CONSTANT` appearance,
-the rest `STROKED_VARIABLE`.
+the rest `STROKED_VARIABLE`. **Event replay** (2026-07-10): the page
+list, order and paper size are replayed from `index.events.pb`
+(page-created order keys + `entity + 1` content mapping + paper
+definitions), so a page whose `notes/` blob is empty or absent still
+materializes; falls back to `index.notes.pb`/zip order + A4 when no
+replayed page matches a `notes/` member.
 
 ## index.events.pb — the document's source of truth `[verified 2026-07-09]`
 
@@ -241,11 +255,26 @@ storage index. Records observed in a real Mac export, in order:
 Import behavior `[verified by iteration]`: without records 2/54/105 the
 container imports but shows **zero pages**. The page ENTITY uuid (54)
 and page CONTENT uuid (105 / member name) are allocated ADJACENTLY:
-`entity = content − 1` (last hex group decremented). With random entity
-uuids the page materializes but stays blank; with the adjacency the ink
-attaches `[inferred from one sample + confirmed import behavior]`. The
-device id (varint, ~62 bits) is shared between the events journal and
-every page-journal header.
+`entity = content − 1` (last hex group decremented) `[verified — two
+independent exports (mixed-pens fixture + 2-page calibration notebook,
+adjacency holds for every pair) + import behavior: random entity uuids
+leave the page blank]`. The device id (varint, ~62 bits) is shared
+between the events journal and every page-journal header.
+
+Further records observed in the iPad calibration export (2026-07-10):
+
+- **Field 106 — per-page stroke version vector** `[verified]`: field 1 =
+  page CONTENT uuid, repeated field 2 = `{1: stroke uuid, 2: {1: version
+  counter, 2: nonce}}`, one entry per stroke record in that page's
+  journal (exact 91/91 match in the calibration file). Untouched strokes
+  sit at version 2; the field-14 re-records' entries carry bumped
+  counters (3–61 observed — NOT erases, see the stroke-message table).
+  No stroke geometry is ever stored in the events log.
+- Field 102: page-content event, field 1 = content uuid `[unknown]`.
+- Fields 105/103 also appear with ATTACHMENT uuids in fields 1/3 and no
+  page-number/content fields — 105 is likely a generic "item linked"
+  event, not page-specific `[inferred]`; the reader therefore replays
+  pages from field 54 + adjacency alone.
 
 ## Writer (experimental, validated=False)
 
@@ -301,15 +330,17 @@ Mac app-import check passes (docs/validated-writes.md). What it emits:
 2. Raw dynamics: pressure-pen section-9 column semantics (stride 5/7)
    and the 9-float alt1/alt2 + pencil c3/c4 angle meanings — fit against
    the calibration page's tilt-pair probes.
-3. Page dimensions field (reader currently grows bounds to ink extents;
-   the mixed-pens fixture page is wider than A4) — case 14.
+3. ~~Page dimensions field~~ RESOLVED 2026-07-10: paper-definition
+   records in index.events.pb (field 8: float32 w, h) — the reader
+   replays them; A4 is only the no-events fallback.
 4. Shape-tool geometry location (shape strokes have empty inline
    geometry + non-empty field 9) — case 09.
 5. ~~Eraser representation~~ RESOLVED 2026-07-10: **erased strokes are
    removed from the page file** — a color-aware point-by-point check
-   found every one of the calibration page's 86 ink records rendered in
-   the app's own PDF export, so the file holds only visible ink and the
-   reader needs no erase handling `[verified]`. (The empty field-14=1
+   found every one of the calibration page's ink records (87 after the
+   pencil-dot recovery) rendered in the app's own PDF export, so the
+   file holds only visible ink and the reader needs no erase handling
+   `[verified]`. (The empty field-14=1
    re-records looked like tombstones but are NOT — the app renders
    those items' ink; a trial tombstone implementation wrongly dropped
    2 visible strokes and was reverted. Their real meaning is
@@ -321,12 +352,24 @@ Mac app-import check passes (docs/validated-writes.md). What it emits:
 8. index.events.pb / index.search.pb / document.info.pb contents.
 9. Paper template (grid/lined background) encoding — nothing
    template-like found in the page records yet.
-10. Events-only pages: the calibration export's page 1 has a 0-byte
-    `notes/` member — its strokes exist only in `index.events.pb`; the
-    reader shows the page empty.
+10. ~~Events-only pages~~ RESOLVED 2026-07-10: a non-issue. The events
+    log stores no stroke geometry (field 106 is a stroke-uuid version
+    vector); the calibration export's 0-byte page is genuinely blank —
+    the app's own PDF export renders it empty. The reader still replays
+    the events page model so such pages materialize with correct order
+    and paper size.
 
 ## Changelog
 
+- 2026-07-10 (events replay): reader replays the events-log page model
+  — page list/order from field-54 order keys + entity+1 adjacency (now
+  [verified] on two exports), paper sizes from paper records; pages
+  with empty/absent notes blobs materialize. Established that the
+  events log holds NO stroke geometry (field 106 = per-page stroke-uuid
+  version vector, 91/91 match with the page journal) — the suspected
+  "events-only page" is genuinely blank, confirmed against the app's
+  own PDF export. Also recovered single-segment pencil dots (the 87th
+  live calibration stroke).
 - 2026-07-10 (erase audit): erasure semantics settled — GoodNotes
   REMOVES erased strokes from the page file (all 86 calibration ink
   records verified rendered in the app's own export, color-aware

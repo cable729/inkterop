@@ -22,7 +22,7 @@ a stroke erased.
 
 | Format | Do erased strokes persist in the file? | Reader behavior | Evidence |
 |---|---|---|---|
-| GoodNotes | **No** — erasing removes the ink record from the page file. The empty field-14=1 re-records are NOT erase tombstones (first read as such; refuted — the app renders those items, and a trial tombstone implementation wrongly dropped 2 visible strokes) | render every ink record (correct) | `[verified]` all 86 calibration ink records render in the app export |
+| GoodNotes | **No** — erasing removes the ink record from the page file. The empty field-14=1 re-records are NOT erase tombstones (first read as such; refuted — the app renders those items, and a trial tombstone implementation wrongly dropped 2 visible strokes) | render every ink record (correct) | `[verified]` all 87 calibration ink records render in the app export (86 at audit time; a single-segment pencil dot decoded later the same day and audits clean) |
 | reMarkable v6 | **Yes** — deleted strokes remain as CRDT sequence items with `value=None` | skipped (`_collect` only descends Group/Line values) | `[verified]` calibration page holds 1 deleted item; golden renders op-identical to official exports across the 110-doc library |
 | Nebo | **Yes** — BINK tombstones (a `-1` word where the stroke was) | skipped since a684a07; tombstones still count in tag indices | `[verified]` 32/32 calibration strokes render in the app export |
 | Excalidraw | **Yes** — elements persist with `isDeleted: true` | skipped (`el.get("isDeleted")` guard) | `[verified]` by code + documented format |

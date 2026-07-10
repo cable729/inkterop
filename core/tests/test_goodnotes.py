@@ -129,6 +129,26 @@ def test_extract_path_tilt_sample_pairs():
     assert path[1] == pytest.approx((508.8, 38.6, 0.55), abs=1e-3)
 
 
+def test_extract_path_pencil_dot_single_segment():
+    """A pencil dot stores ONE 11-float segment struct (plus a 5-float
+    anchor); the two segment endpoints must still come out."""
+    from inkterop.formats.goodnotes.wire import encode_tpl
+
+    blob = encode_tpl([
+        ("scalar", "v", [1]),
+        ("scalar", "u", [1.56]),
+        ("array", "v", [0, 1]),
+        ("struct_array", "uuuuu", [(509.5, 251.4, -2.15, 1.43, 0.77)]),
+        ("struct_array", "u" * 11,
+         [(24466.2, 508.4, 251.1, -2.27, 1.43, 0.38,
+           507.3, 250.9, -2.39, 1.43, 0.0)]),
+    ])
+    path, constant = extract_path(blob)
+    assert constant is True
+    assert path == [pytest.approx((508.4, 251.1, 1.56)),
+                    pytest.approx((507.3, 250.9, 1.56))]
+
+
 def test_parse_tpl_rejects_residue():
     blob = _tpl_blob([(10.0, 20.0, 1.5), (30.0, 40.0, 2.0)])
     with pytest.raises(Exception, match="tpl"):
@@ -178,6 +198,32 @@ def test_fixture_mixed_pens():
                for w in marker.channels[ir.Channel.WIDTH])
     assert all(0 < w <= 60
                for s in strokes for w in s.channels[ir.Channel.WIDTH])
+
+
+# --- self-made calibration corpus (skips when absent) -------------------------
+
+CALIBRATION = (Path(__file__).parents[2] / "corpus" / "calibration"
+               / "goodnotes-calibration.goodnotes")
+
+
+@pytest.mark.skipif(not CALIBRATION.exists(),
+                    reason="calibration corpus not present")
+def test_calibration_events_replay_and_ipad_layouts():
+    """iPad export (journal-25): the empty page replays from the events
+    log with true paper bounds; tilt sample pairs and pencil dots
+    decode; field-14 re-records (empty geometry) yield no strokes."""
+    doc = GoodnotesReader().read(CALIBRATION)
+    doc.validate()
+    assert len(doc.pages) == 2
+    # page 1 (blue paper) is genuinely empty — the app's own PDF export
+    # renders it blank; its paper size comes from the events journal.
+    assert not list(doc.pages[0].strokes())
+    assert doc.pages[0].bounds.width == pytest.approx(834.24, abs=0.01)
+    assert doc.pages[0].bounds.height == pytest.approx(1078.82, abs=0.01)
+    # page 2 holds all ink: 91 journal records = 87 with geometry + 4
+    # empty field-14 re-records (docs/erase-audit.md: not tombstones).
+    strokes = list(doc.pages[1].strokes())
+    assert len(strokes) == 87
 
 
 # --- corpus integration ------------------------------------------------------
