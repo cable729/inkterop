@@ -35,11 +35,28 @@ Decided (approved plan) and implemented:
   split, byte-level with worked examples; migrate each format when its
   rendering rule gets measured (reMarkable exemplar first).
 
-Waiting on the maintainer (morning): **iPad calibration pages**
-(`docs/calibration-pages.md` — the drawing script) and a **computer-use
-access grant** for the GoodNotes/Notability round-3 app-open checks
-(staged files in `corpus/validate/` regenerated with the fixed writers;
-containers snapshot via appctl before any import).
+**Calibration pages LANDED 2026-07-10** — all five apps
+(reMarkable/GoodNotes/Notability/Saber/Nebo) drawn per
+`docs/calibration-pages.md`, extracted to `corpus/calibration/`
+(native + app PDF for each; SVG for reMarkable + Nebo; MANIFEST.md +
+analysis-notes.md alongside). Fallout landed the same day:
+
+- **Nebo reader**: BINK stroke tombstones (erased strokes leave a -1
+  word, still counted), tag-table span-group counts, tag indices count
+  tombstones; first real Apple-Pencil force data (capacitive samples
+  were f=255). Open: do HIGHLIGHT_STROKES/brush tags cover a run of
+  strokes? (only anchor stroke styled today).
+- **Saber reader**: new `ballpointPen` tool name mapped.
+- **Notability color byte order RESOLVED** (red stroke decodes red) —
+  writer validation no longer gated on it.
+- **GoodNotes reader gaps found**: exported page with 0-byte notes/
+  blob (strokes live only in index.events.pb — needs event replay in
+  the READER), and pen-style records aren't decoded (all strokes
+  generic pen). Both block per-style calibration analysis.
+- First-pass per-tool channel stats in
+  `corpus/calibration/analysis-notes.md` (rM: fineliner/highlighter
+  constant width, marker/pencil/ballpoint strongly pressure-coupled,
+  calligraphy likely tilt-driven; Nebo law now fittable vs its SVG).
 
 ## What landed (this branch)
 

@@ -54,7 +54,12 @@ u32 nstrokes (=2)
 ### Stroke records `[verified]`
 
 ```
-u32  flags        0x80000000 in every stroke seen        [unknown]
+u32  flags        0x80000000 = live stroke; 0xffffffff = TOMBSTONE:
+                  an erased stroke leaves this single -1 word as the
+                  whole record and still counts toward nstrokes.
+                  Tag-table stroke indices count tombstones.  [verified]
+                  (Apple-Pencil calibration page, Nebo iPad 7.4.3:
+                  36 records = 32 live + 4 tombstones)
 u64  t0           MICROSECONDS since Unix epoch. Cross-checked two
                   ways: value = sample's creation date, and the tag
                   table's "DWContentFieldName": "1/Text<t0>" reuses it.
@@ -65,7 +70,9 @@ u16  0
 u32  n            point count
 i16  dx[n]        X first differences (dx[0] relative to x0, = 0)
 i16  dy[n]        Y first differences
-u8   f[n]         force; 255 everywhere for capacitive-pen input
+u8   f[n]         force; 255 everywhere for capacitive-pen input.
+                  Apple Pencil stores real values (0..~250 observed on
+                  the calibration page; every stroke varies) [verified]
 ```
 
 Position: `x_mm = x0 + cumsum(dx)/500` — **1 delta unit = 2 µm**.
@@ -90,15 +97,26 @@ records; record 0 has NO head, records 1..count-1 have:
   u32 0
 each record:
   str  name
-  u32 1   u16 3   u16 span_start
-  u32 g             usually == stroke index                 [inferred]
-  u8 u8             usually 05 ff; 01 00 on one partial-span CHAR
-  u16 span_end      last sample index of the span (n-1 for full-stroke
+  u32 ngroups       span-group count — 1 in most records; Apple-Pencil
+                    pages emit multi-group records (e.g. 3)  [verified]
+  ngroups x:
+    u16 3   u16 span_start
+    u32 g           usually == stroke index                 [inferred]
+    u8 u8           usually 05 ff; 01 00 on one partial-span CHAR
+    u16 span_end    last sample index of the span (n-1 for full-stroke
                     tags; CHAR spans split at recognition boundaries)
-  u32 stroke_idx    ("h") — consistent with span lengths even where g
+    u32 stroke_idx  ("h") — consistent with span lengths even where g
                     is not; the reader uses this one            [inferred]
-  u32 str_len + utf-8 payload (may be empty)
+  u32 str_len + utf-8 payload (may be empty; shared by all groups)
 ```
+
+New tag names seen on Apple-Pencil pages: `active-pen-input` (input
+device marker), `component-brush`, `brush-oriented`, and highlighter
+styling `"-myscript-pen-pressure-sensitivity: 0;color:#FFDD3366"`
+(alpha byte in the color). Open question: a `HIGHLIGHT_STROKES` /
+brush record appears to anchor only ONE stroke of a drawn row of 8 —
+whether the tag legally covers a run of strokes (and which) is
+unresolved; the reader currently styles only the anchor stroke.
 
 Observed record names, per stroke:
 

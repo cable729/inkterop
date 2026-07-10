@@ -39,6 +39,7 @@ FORMAT_ID = "saber"
 TOOL_FAMILY = {
     "fountainpen": ir.ToolFamily.PEN,
     "ballpoint": ir.ToolFamily.BALLPOINT,
+    "ballpointpen": ir.ToolFamily.BALLPOINT,  # Saber >=1.35 tool name
     "fineliner": ir.ToolFamily.FINELINER,
     "brush": ir.ToolFamily.BRUSH,
     "pencil": ir.ToolFamily.PENCIL,

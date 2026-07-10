@@ -156,7 +156,7 @@ Op type 3 payload: single u32 = 2 `[unknown]`.
 | 1 | 2×f32 | stroke origin, page pt = the first anchor point | `[verified]` |
 | 4 | u8 | tool: 0/absent = pen, 1 = pencil, 2 = highlighter | `[inferred]` |
 | 5 | u8 = 1 | ? (absent on the pen stroke) | `[unknown]` |
-| 7 | 4 bytes | color R,G,B,A (B and A pinned by the yellow alpha-107 sample; R vs G order untested — needs a red corpus case) | `[inferred]` |
+| 7 | 4 bytes | color R,G,B,A (B and A pinned by the yellow alpha-107 sample; R-before-G order confirmed by the red calibration stroke, 2026-07-10 — decodes as (0.93,0.21,0.14)) | `[verified]` |
 | 8 | f32 | base stroke width, pt (3.1875 pen/pencil, 15.9375 highlighter) | `[verified]` |
 | 9 | vector\<u8\> | point blob (below) | `[verified]` |
 | 14 | u32 = 999999 | highlighter only | `[unknown]` |
@@ -228,11 +228,10 @@ multipliers (`exact` fidelity). `native` writes multipliers 1.0 at the
 app's observed default base widths; `raw` raises. Multi-page documents
 write page 1 only with a warning (op-log page framing `[unknown]`).
 
-Validation is **gated on open question #4** (color byte order R vs G):
-RGBA is emitted exactly as the reader interprets it, so in-repo
-round-trips are safe either way, but a red stroke could come out
-blue-channel-swapped in the app until the red corpus case lands — plus
-the usual app-open check per `docs/validated-writes.md`. Precedent
+~~Validation gate: color byte order R vs G~~ **RESOLVED 2026-07-10**:
+the red calibration stroke (corpus/calibration/notability-calibration
+.ntb) decodes as red with the reader's byte order — the gate is now
+only the usual app-open check per `docs/validated-writes.md`. Precedent
 note: svg2notability demonstrated third-party *writes* Notability
 accepts, but against the **legacy** `Session.plist` format — if .ntb
 app-import fails, a legacy plist writer is the fallback lane.

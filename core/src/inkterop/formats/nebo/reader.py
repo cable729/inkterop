@@ -142,8 +142,13 @@ def parse_bink(data: bytes) -> dict:
     nstrokes = c.u32()
 
     strokes = []
-    for _ in range(nstrokes):
+    for rec_idx in range(nstrokes):
         flags = c.u32()
+        if flags == 0xFFFFFFFF:
+            # Tombstone: an erased stroke leaves a single -1 word in the
+            # record stream and still counts toward nstrokes (seen in
+            # Apple-Pencil pages from Nebo iPad 7.4.3).
+            continue
         if flags != 0x80000000:
             _logger.warning("unexpected stroke flags 0x%08x", flags)
         t0_us = c.u64()
@@ -157,6 +162,7 @@ def parse_bink(data: bytes) -> dict:
         dy = struct.unpack_from(f"<{n}h", c.raw(2 * n))
         force = list(c.raw(n))
         strokes.append({
+            "rec": rec_idx,  # tag stroke indices count tombstones too
             "t0_us": t0_us,
             "x": [x0 + d / DELTA_UNITS_PER_MM for d in accumulate(dx)],
             "y": [y0 + d / DELTA_UNITS_PER_MM for d in accumulate(dy)],
@@ -174,16 +180,19 @@ def parse_bink(data: bytes) -> dict:
                 c.u32()  # record id
                 c.u32()
             name = c.string(256)
-            c.u32()
-            c.u16()
-            span_start = c.u16()
-            c.u32()  # g — matches stroke_idx except on page-level tags
-            c.raw(2)  # usually 05 ff
-            span_end = c.u16()
-            stroke_idx = c.u32()
+            groups = []
+            for _ in range(c.u32()):  # span-group count (1 in most records)
+                c.u16()
+                span_start = c.u16()
+                c.u32()  # g — matches stroke_idx except on page-level tags
+                c.raw(2)  # usually 05 ff
+                span_end = c.u16()
+                stroke_idx = c.u32()
+                groups.append((stroke_idx, (span_start, span_end)))
             text = c.string(65536)
-            tags.append({"name": name, "stroke": stroke_idx,
-                         "span": (span_start, span_end), "text": text})
+            for stroke_idx, span in groups:
+                tags.append({"name": name, "stroke": stroke_idx,
+                             "span": span, "text": text})
     except BinkError as exc:
         # Geometry is already decoded; styling degrades to defaults.
         _logger.warning("BINK tag table parse stopped: %s", exc)
@@ -268,7 +277,7 @@ def _page_from_zip(zf: zipfile.ZipFile, page_id: str) -> ir.Page:
         for tag in bink["tags"]:
             by_stroke.setdefault(tag["stroke"], []).append(tag)
         for idx, raw in enumerate(bink["strokes"]):
-            tags = by_stroke.get(idx, [])
+            tags = by_stroke.get(raw.get("rec", idx), [])
             names = [t["name"] for t in tags]
             style: dict = {}
             for t in tags:
