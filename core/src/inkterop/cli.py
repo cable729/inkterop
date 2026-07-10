@@ -34,6 +34,19 @@ def main(argv: list[str] | None = None) -> int:
                    help="allow writers not yet validated against their app")
     c.add_argument("--force", action="store_true",
                    help="skip output-path safety checks")
+    v = sub.add_parser("visualdiff",
+                       help="pixel-compare two PDFs page by page")
+    v.add_argument("a", type=Path, help="reference PDF")
+    v.add_argument("b", type=Path, help="candidate PDF")
+    v.add_argument("--mode", choices=["strict", "registered"],
+                   default="strict",
+                   help="strict: same raster size; registered: crop to ink "
+                        "bbox and rescale (cross-app)")
+    v.add_argument("--dpi", type=int, default=None)
+    v.add_argument("--tolerance", type=int, default=None,
+                   help="per-channel 0-255 pixel tolerance")
+    v.add_argument("--report", type=Path, default=None,
+                   help="directory for .diff.png overlays")
     i = sub.add_parser("inspect", help="summarize a note file's parsed content")
     i.add_argument("input", help="input file, or library document name/uuid")
     i.add_argument("--json", action="store_true", dest="as_json",
@@ -71,6 +84,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {e}", file=sys.stderr)
             return 1
         print(args.output)
+        return 0
+
+    if args.cmd == "visualdiff":
+        from .visual.diff import DEFAULT_PIXEL_TOLERANCE, compare_pdfs
+        results = compare_pdfs(
+            args.a, args.b, mode=args.mode, dpi=args.dpi,
+            pixel_tolerance=(args.tolerance if args.tolerance is not None
+                             else DEFAULT_PIXEL_TOLERANCE),
+            report_dir=args.report)
+        from .visual.raster import page_count
+        ca, cb = page_count(args.a), page_count(args.b)
+        if ca != cb:
+            print(f"page-count mismatch: {ca} vs {cb} "
+                  f"(comparing first {min(ca, cb)})", file=sys.stderr)
+        worst = 1.0
+        for i, r in enumerate(results, 1):
+            note = f"  [{r.aspect_warning}]" if r.aspect_warning else ""
+            print(f"p{i}: match {r.match_ratio:.4%}  ink-match "
+                  f"{r.ink_match_ratio:.4%}  ({r.n_diff_pixels} px differ, "
+                  f"{r.n_ink_pixels} ink px){note}")
+            worst = min(worst, r.ink_match_ratio)
+        print(f"worst ink-match: {worst:.4%}")
         return 0
 
     if args.cmd == "inspect":

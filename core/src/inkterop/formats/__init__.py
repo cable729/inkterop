@@ -20,6 +20,7 @@ def _load() -> None:
     _LOADED = True
     from ..render.pdf import PdfWriter
     from ..render.svg import SvgWriter
+    from ..visual.png import PngWriter
     from .boox import BooxReader
     from .excalidraw import ExcalidrawReader, ExcalidrawWriter
     from .goodnotes import GoodnotesReader, GoodnotesWriter
@@ -50,7 +51,8 @@ def _load() -> None:
         SdocxReader(), OneNoteReader(), PkDrawingReader(), TldrawReader(),
     ])
     _WRITERS.extend([
-        PdfWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(), SvgWriter(),
+        PdfWriter(), PngWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(),
+        SvgWriter(),
         SaberWriter(), ExcalidrawWriter(),
         RemarkablePageWriter(), RmdocWriter(), SupernoteWriter(),
         GoodnotesWriter(), NtbWriter(),

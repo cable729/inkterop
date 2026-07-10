@@ -14,6 +14,8 @@ dependencies = [
     "watchdog>=4.0",
     "supernotelib>=0.7.1",
     "pillow>=10",
+    "pypdfium2>=4.30",
+    "numpy>=1.26",
 ]
 
 [project.scripts]
