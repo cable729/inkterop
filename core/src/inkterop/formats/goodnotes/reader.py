@@ -21,9 +21,15 @@ top-left origin, width has pressure baked in (device-rendered width, like
 reMarkable). Fountain vs brush is NOT stored per stroke — both read as
 generic PEN.
 
-Not yet decoded: erasers (field 14 tombstones?), images, text boxes,
-page dimensions (A4 assumed), PDF-background linkage. Tracked in
-docs/formats/goodnotes.md with confidence markers.
+Page list, order and dimensions replay from `index.events.pb` (paper
+definitions + page-created events; the app derives the document from this
+journal, and a page whose `notes/` blob is empty or absent still exists).
+Falls back to `index.notes.pb`/zip order + A4 when the events log is
+missing or its page model doesn't match the container.
+
+Not yet decoded: erasers (field-14 re-records are NOT tombstones —
+docs/erase-audit.md), images, text boxes, PDF-background linkage.
+Tracked in docs/formats/goodnotes.md with confidence markers.
 """
 from __future__ import annotations
 
@@ -213,9 +219,13 @@ def extract_path(blob: bytes) -> tuple[list[tuple[float, float, float]], bool]:
     # segment + the last segment's second endpoint.
     w = (scalar_width if scalar_width and 0 < scalar_width <= _MAX_W
          else 1.0)
+    # Dots are a single segment struct (2 points), so accept length-1
+    # arrays; ties between them prefer the widest struct (the 11-float
+    # pencil segment over its 5-float anchor).
     struct_arrays = [(spec, vals) for kind, spec, vals in sections
-                     if kind == "struct_array" and len(vals) >= 2]
-    for spec, vals in sorted(struct_arrays, key=lambda sv: -len(sv[1])):
+                     if kind == "struct_array" and vals]
+    for spec, vals in sorted(struct_arrays,
+                             key=lambda sv: (-len(sv[1]), -len(sv[0]))):
         n = len(spec)
         for (i, j), (k, l) in ((( 0, 1), (2, 3)), ((1, 2), (6, 7))):
             if max(k, l) >= n:
@@ -223,7 +233,7 @@ def extract_path(blob: bytes) -> tuple[list[tuple[float, float, float]], bool]:
             pts = [(t[i], t[j]) for t in vals] + [(vals[-1][k], vals[-1][l])]
             if all(0 <= x <= _MAX_X and 0 <= y <= _MAX_Y for x, y in pts):
                 return [(x, y, w) for x, y in pts], True
-        if n == 2:  # plain (x, y) pairs
+        if n == 2 and len(vals) >= 2:  # plain (x, y) pairs
             if all(0 <= x <= _MAX_X and 0 <= y <= _MAX_Y for x, y in vals):
                 return [(x, y, w) for x, y in vals], True
     return [], scalar_width is not None
@@ -390,6 +400,89 @@ def _page_order(zf: zipfile.ZipFile) -> list[str]:
     return sorted(names)
 
 
+def _ascii_field(fields: dict, number: int) -> str | None:
+    for f in fields.get(number, []):
+        if isinstance(f.value, bytes):
+            try:
+                return f.value.decode("ascii")
+            except UnicodeDecodeError:
+                return None
+    return None
+
+
+def _content_uuid(entity: str) -> str | None:
+    """Page ENTITY uuid -> page CONTENT uuid (the notes/<uuid> member).
+
+    The app allocates them adjacently: content = entity + 1 in the last
+    hex group. [verified] on two independent exports (mixed-pens fixture,
+    calibration notebook — two pages each pair adjacent) + app import
+    behavior (random entity uuids leave the page blank).
+    """
+    head, _, tail = entity.rpartition("-")
+    try:
+        n = int(tail, 16) + 1
+    except ValueError:
+        return None
+    if not head or n >= 1 << (4 * len(tail)):
+        return None
+    return f"{head}-{n:0{len(tail)}X}"
+
+
+def _events_page_model(
+    zf: zipfile.ZipFile,
+) -> list[tuple[str, tuple[float, float] | None]] | None:
+    """Replay index.events.pb into the page list the app derives from it:
+    [(content_uuid, paper (w, h) in points | None)] in display order.
+
+    The events journal is the document's source of truth — a page whose
+    notes blob is empty (or absent) still exists as a page-created event.
+    Replayed records (docs/formats/goodnotes.md): paper definitions
+    (top field 2: body 2 = paper uuid, body 8 = {1: w, 2: h} float32) and
+    page-created events (top field 54: body 2 = page entity uuid,
+    body 3.1 = paper ref, body 4.1 = lexicographic order key). Returns
+    None when nothing replayable is present.
+    """
+    try:
+        records = split_delimited(zf.read("index.events.pb"))
+    except (KeyError, WireError):
+        return None
+    papers: dict[str, tuple[float, float]] = {}
+    created: list[tuple[str, str, str | None]] = []  # (order, entity, paper)
+    for rec in records:
+        try:
+            fields = fields_by_number(rec)
+            if 2 in fields and isinstance(fields[2][0].value, bytes):
+                body = fields_by_number(fields[2][0].value)
+                paper_uuid = _ascii_field(body, 2)
+                if paper_uuid and 8 in body:
+                    dims = fields_by_number(body[8][0].value)
+                    if 1 in dims and 2 in dims:
+                        w, h = dims[1][0].value, dims[2][0].value
+                        if (isinstance(w, float) and isinstance(h, float)
+                                and 0 < w <= _MAX_X and 0 < h <= _MAX_Y):
+                            papers[paper_uuid] = (w, h)
+            elif 54 in fields and isinstance(fields[54][0].value, bytes):
+                body = fields_by_number(fields[54][0].value)
+                entity = _ascii_field(body, 2)
+                order = paper = None
+                if 4 in body and isinstance(body[4][0].value, bytes):
+                    order = _ascii_field(fields_by_number(body[4][0].value), 1)
+                if 3 in body and isinstance(body[3][0].value, bytes):
+                    paper = _ascii_field(fields_by_number(body[3][0].value), 1)
+                if entity:
+                    created.append((order or "", entity, paper))
+        except (WireError, TypeError, IndexError):
+            continue
+    if not created:
+        return None
+    model = []
+    for _, entity, paper in sorted(created, key=lambda c: c[0]):
+        content = _content_uuid(entity)
+        if content is not None:
+            model.append((content, papers.get(paper)))
+    return model or None
+
+
 class GoodnotesReader:
     format_id = FORMAT_ID
     extensions = (".goodnotes",)
@@ -408,9 +501,25 @@ class GoodnotesReader:
 
     def read(self, path: Path) -> ir.Document:
         with zipfile.ZipFile(path) as zf:
+            members = {n.removeprefix("notes/") for n in zf.namelist()
+                       if n.startswith("notes/") and not n.endswith("/")}
+            # Event replay first: the journal is the app's source of
+            # truth for which pages exist, their order and paper size.
+            # Sanity-check it against the container (if no replayed page
+            # matches a notes/ member, the entity->content adjacency
+            # doesn't hold for this file) and keep index.notes.pb order
+            # as the fallback, appending any members replay missed.
+            model = _events_page_model(zf)
+            if model and any(uid in members for uid, _ in model):
+                claimed = {uid for uid, _ in model}
+                page_list = model + [(uid, None) for uid in _page_order(zf)
+                                     if uid not in claimed]
+            else:
+                page_list = [(uid, None) for uid in _page_order(zf)]
             pages = []
-            for page_uuid in _page_order(zf):
-                raw = zf.read(f"notes/{page_uuid}")
+            for page_uuid, paper_size in page_list:
+                raw = (zf.read(f"notes/{page_uuid}")
+                       if page_uuid in members else b"")
                 strokes = []
                 meta_record_hex = None
                 meta_payload_hex = None
@@ -443,16 +552,18 @@ class GoodnotesReader:
                             if nums == {9}:
                                 meta_payload_hex = rec.hex()
                         strokes.extend(found)
-                # Page-dimension field is [unknown]; assume A4 but grow to
-                # the ink extents so nothing clips on larger papers.
+                # Paper size replays from the events journal; without one
+                # assume A4. Either way grow to the ink extents so nothing
+                # clips on larger papers.
+                page_w, page_h = paper_size or A4_PT
                 xs = [x for s in strokes for x in s.x]
                 ys = [y for s in strokes for y in s.y]
                 margin = 12.0
                 bounds = ir.Rect(
                     min([0.0] + ([min(xs) - margin] if xs else [])),
                     min([0.0] + ([min(ys) - margin] if ys else [])),
-                    max([A4_PT[0]] + ([max(xs) + margin] if xs else [])),
-                    max([A4_PT[1]] + ([max(ys) + margin] if ys else [])),
+                    max([page_w] + ([max(xs) + margin] if xs else [])),
+                    max([page_h] + ([max(ys) + margin] if ys else [])),
                 )
                 pages.append(ir.Page(
                     bounds=bounds,

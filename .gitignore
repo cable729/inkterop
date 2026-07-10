@@ -7,7 +7,8 @@ build/
 .DS_Store
 .pytest_cache/
 .ruff_cache/
-corpus/
+# no trailing slash: also matches a worktree symlink to the real corpus
+corpus
 *.xcuserdata/
 macos/DerivedData/
 site/
