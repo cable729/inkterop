@@ -215,7 +215,13 @@ declared contract, not a runtime check.
    `docs/formats/<name>.md` with confidence markers.
 3. Channels: normalize to the units contract above. If the source stores
    device-rendered widths, emit `WIDTH` and do not synthesize widths from
-   pressure.
+   pressure. If the source stores raw channels and the app's rendering
+   rule has been *measured* (`ir/renderrule.py`, fitted against the
+   app's own export — see `docs/calibration-results.md`), bake the rule's
+   output into per-point `WIDTH`/`ALPHA` so the IR holds the actual
+   rendered look; writers apply the registry's inverse rule (the
+   Excalidraw pattern: encode a target width as native params +
+   synthetic per-point channel values).
 4. Tools: map to `ToolFamily`; preserve the raw tool record in
    `NativeTool`.
 5. Appearance: populate from *observed* source-app rendering (validated

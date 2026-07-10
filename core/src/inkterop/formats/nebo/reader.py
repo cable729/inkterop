@@ -32,11 +32,13 @@ BINK v5, all little-endian, byte-packed:
   and recognition output (CHAR/WORD/TEXT spans, DIAGRAM JSON).
 
 The T (ms) channel is declared but not stored per point; only the
-per-stroke t0 survives. F was constant 255 in every capacitive-pen
-sample seen so far. MyScript's speed/pressure-based variable-width
-rendering is not reimplemented: strokes get a constant-width appearance
-from the brush name (pen-025 = 0.25 mm), so `exact` fidelity is
-approximate for pressure-sensitive pens [inferred].
+per-stroke t0 survives. F is constant 255 for capacitive-pen input;
+Apple Pencil samples carry real force. When force varies, the measured
+rendering law (ir/renderrule.py: width = base x (1 + sensitivity x
+2.43 x (force - 0.29)), [verified] against Nebo 7.4.3's own SVG export)
+is baked into a per-point WIDTH channel; constant-force strokes keep
+the constant-width appearance from the brush name (pen-025 = 0.25 mm),
+since how the app renders sensor-less strokes is [unknown].
 
 Coordinates are millimeters, y-down, page origin top-left
 (`pageExtent [0,0,210,297]` = A4). point_scale = 72/25.4.
@@ -55,6 +57,7 @@ from itertools import accumulate
 from pathlib import Path
 
 from ... import ir
+from ...ir import renderrule
 
 _logger = logging.getLogger(__name__)
 
@@ -230,6 +233,22 @@ def _ir_stroke(raw: dict, tag_names: list[str], style: dict,
     color = style.get("color", ir.Color(0.0, 0.0, 0.0))
     alpha = style.get("alpha", 1.0)
     family = ir.ToolFamily.HIGHLIGHTER if highlight else ir.ToolFamily.PEN
+    forces = [f / 255.0 for f in raw["f"]]
+    channels: dict[ir.Channel, list[float]] = {ir.Channel.PRESSURE: forces}
+    sensitivity = style.get("pressure_sensitivity")
+    if sensitivity is None and not highlight:
+        # Style tags only reach the run's anchor stroke (tag-run gap), but
+        # the app's export renders every pen stroke force-varying; 0.8 is
+        # the app default observed on the calibration page [inferred].
+        sensitivity = 0.8
+    # Bake the measured rendering law into WIDTH when there is real force
+    # data (capacitive input is constant 255; how the app renders those
+    # is unmeasured, so they keep the constant appearance width).
+    variable = sensitivity and max(forces) - min(forces) > 1.5 / 255.0
+    if variable:
+        channels[ir.Channel.WIDTH] = [
+            renderrule.nebo_rendered_width(f, width_mm, sensitivity)
+            for f in forces]
     return ir.Stroke(
         x=raw["x"], y=raw["y"],
         tool=ir.ToolRef(
@@ -240,10 +259,11 @@ def _ir_stroke(raw: dict, tag_names: list[str], style: dict,
             }),
         ),
         color=color,
-        channels={ir.Channel.PRESSURE: [f / 255.0 for f in raw["f"]]},
+        channels=channels,
         appearance=ir.StrokeAppearance(
-            mode=ir.GeometryMode.STROKED_CONSTANT,
-            width=width_mm,
+            mode=(ir.GeometryMode.STROKED_VARIABLE if variable
+                  else ir.GeometryMode.STROKED_CONSTANT),
+            width=None if variable else width_mm,
             color=color,
             opacity=alpha,
             cap=ir.LineCap.ROUND,

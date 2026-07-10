@@ -143,12 +143,37 @@ by the reader.
 
 ### Rendering notes
 
-- F was constant 255 (capacitive pen, no pressure). The app still
-  renders variable-width pen strokes (speed-based, sensitivity 0.57);
-  that algorithm is MyScript's and is NOT reimplemented — the reader
-  emits constant-width appearances from the brush name, so `exact`
-  fidelity is approximate for pens `[inferred]`.
+- **Measured width law** (calibration page, Nebo iPad 7.4.3, Apple
+  Pencil, oracle = the app's own SVG export; fitted 2026-07-10):
+
+  ```
+  rendered_width = base_width × (1 + sensitivity × 2.43 × (force − 0.29))
+  ```
+
+  where `base_width` comes from the brush name (pen-025 = 0.25 mm),
+  `force` = `f[n]/255`, and `sensitivity` is the .STYLE
+  `-myscript-pen-pressure-sensitivity` value. Measured ribbon widths
+  span 0.33–2.44 × base over the force range and cross 1.0 × base at
+  force ≈ 0.29 `[verified at sensitivity 0.8]`. The highlighter
+  (sensitivity 0) renders constant 1.06 × base — consistent with the
+  same law at s=0, so the sensitivity parametrization is `[inferred]`
+  (only s=0.8 and s=0 sampled). Constants + inverse live in
+  `ir/renderrule.py`; per-force bin table in
+  `docs/calibration-results.md`.
+- The reader bakes this law into a per-point `WIDTH` channel whenever
+  the force channel actually varies (real pen data). Capacitive input
+  is constant f=255 — how the app renders those (speed-based?) is
+  `[unknown]`, so they keep the constant-width appearance from the
+  brush name.
+- Style tags only reach a run's anchor stroke (tag-run gap, open
+  question below), but the app's export renders *every* pen stroke
+  force-varying; the reader assumes the app-default sensitivity 0.8
+  for unstyled pen strokes `[inferred]`.
 - Highlighter: `#FFDD3366`, 5 mm, drawn as a translucent band.
+- PDF export lane: the app's PDF export of the calibration page does
+  not register against our render yet (our page size bug — Letter vs
+  A4 — plus a ~4% content-aspect delta); use the SVG lane as the
+  geometry oracle for now.
 
 ## Validation
 
@@ -181,8 +206,10 @@ the app.
    sample where precision differs).
 3. BDOM: layout tree; needed for text blocks and non-ink objects
    (recognized text currently comes back only as tag-table spans).
-4. Do pressure-capable pens store varying `f[n]` and does the ink
-   then carry per-point T? (Both channels are declared.)
+4. ~~Do pressure-capable pens store varying `f[n]`?~~ Answered
+   2026-07-10: yes — the Apple Pencil calibration sample carries real
+   force (see Rendering notes). Still open: does any sample store
+   per-point T? (The channel is declared but was absent again.)
 
 ## Changelog
 

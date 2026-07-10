@@ -36,6 +36,7 @@ from statistics import median
 from typing import Any
 
 from .. import ir
+from ..ir import renderrule
 from ._scale import unit_factor
 from .base import Fidelity
 
@@ -50,21 +51,12 @@ _DEFAULT_STROKE = "#1e1e1e"
 #   thickness(p) = strokeWidth * 8.5 * sin(pi/2 * (0.5 + 0.6*(p - 0.5)))
 # i.e. 8.08x at p=1.0, 6.01x at p=0.5. simulatePressure strokes measured
 # ~6.9x on a uniform-speed probe (speed-dependent, approximate).
-_FREEDRAW_SIZE = 8.5
-_FREEDRAW_THINNING = 0.6
+# Constants and forward/inverse functions live in the measured-rules
+# registry (ir/renderrule.py) alongside the other apps' laws.
 _SIMULATED_FACTOR = 6.9
 
-
-def _thickness_factor(pressure: float) -> float:
-    """Rendered freedraw thickness per unit strokeWidth at a pressure."""
-    t = 0.5 + _FREEDRAW_THINNING * (pressure - 0.5)
-    return _FREEDRAW_SIZE * math.sin(math.pi / 2.0 * t)
-
-
-def _pressure_for_ratio(ratio: float) -> float:
-    """Inverse of _thickness_factor: ratio = thickness / strokeWidth."""
-    t = 2.0 / math.pi * math.asin(max(0.0, min(1.0, ratio / _FREEDRAW_SIZE)))
-    return max(0.0, min(1.0, 0.5 + (t - 0.5) / _FREEDRAW_THINNING))
+_thickness_factor = renderrule.excalidraw_thickness_factor
+_pressure_for_ratio = renderrule.excalidraw_pressure_for_ratio
 
 
 def _parse_color(hex_str: str | None) -> tuple[ir.Color, float]:

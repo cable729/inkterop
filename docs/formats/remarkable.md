@@ -54,6 +54,33 @@ were reverse-engineered for older formats where width wasn't stored, and
 applying them here double-counts pressure (calligraphy → blobs) and
 subtracts speed (ballpoint → hairlines that antialias gray).
 
+**Verified against the official SVG export** (desktop 3.27.2, calibration
+page, 2026-07-10; viewBox is the canvas 1620×2160, so `stroke-width` is
+directly in canvas units): constant-width tools export stroked polylines
+whose `stroke-width` equals the IR WIDTH channel (`point.width/4`)
+*exactly* — fineliner 4.0=4.0, highlighter 30.0=30.0. Variable-width
+tools export filled outlines whose perpendicular ribbon width measures
+1.01–1.02× the channel (ballpoint/calligraphy/shader). Soft-edge tools
+read lower in the export — marker/brush ≈0.8×, pencil ≈0.6×,
+mechanical pencil ≈0.7× — consistent with the outline tracing an opacity
+threshold inside the nominal width, not with a different width law
+`[inferred]`.
+
+**Calligraphy width driver** (calibration tilt-pair probes, 2026-07-10):
+the device computes calligraphy width from **stroke travel direction
+against a fixed nib axis, plus pressure — NOT from pen tilt** (the
+`tilt_azimuth` channel is near-zero throughout and does not correlate).
+Fitted (R²=0.54, 313 pts, single thickness_scale=2.0 in sample):
+
+```
+width/thickness_scale = 2.855 − 2.176·|sin(θ − 92°)| + 1.004·pressure
+```
+
+θ = atan2(dy,dx) in display coords; width peaks when travel ⊥ nib.
+Constants in `ir/renderrule.py` (`remarkable_calligraphy_width`) — this
+is the *inverse* rule for writers synthesizing calligraphy into .rm;
+reading needs no rule (the stored width already includes it).
+
 Our renderer (`core/src/inkterop/render.py`) approximates the official
 filled-outline approach by splitting variable-width strokes into
 constant-width runs (tolerance 0.35u) drawn with round caps; highlighters
