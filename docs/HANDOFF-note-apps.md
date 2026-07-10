@@ -76,10 +76,14 @@ analysis-notes.md alongside). Fallout landed the same day:
   -1-word tombstones are skipped correctly; excalidraw isDeleted
   skipped. Open erase risks: Notability edited-note ops (unmapped),
   Boox orphan points, PencilKit partial-erase masks.
-- **IN FLIGHT (2026-07-10, separate session/worktree): GoodNotes
-  events-only page replay** (0-byte notes/ blob, strokes only in
-  index.events.pb). Check for its branch/commits before starting;
-  integrate rather than redo.
+- **GoodNotes events-only pages: DONE + MERGED 2026-07-10** (f29e3d2) —
+  the premise dissolved: the events log holds NO stroke geometry (field
+  106 = per-page stroke-uuid version vector), and the calibration
+  file's 0-byte page is genuinely blank. What landed instead: the
+  reader replays page list/order/paper size from index.events.pb
+  (resolves the page-dimensions question — 834.24×1078.825 pt standard
+  paper) and recovers single-segment pencil dots. Both 2026-07-10
+  GoodNotes sessions are now merged; no GoodNotes work is in flight.
 
 ## What landed (this branch)
 
