@@ -109,35 +109,42 @@ def _snapshot_dir(app: App) -> Path:
     return SNAPSHOTS / app.key
 
 
+def _data_dir(app: App) -> Path:
+    """The app's mutable state. Only Data/ is ours to copy — the container
+    root holds SIP-protected containermanagerd metadata."""
+    assert app.container is not None
+    return app.container / "Data"
+
+
 def cmd_snapshot(app: App) -> int:
     if not app.resettable:
         sys.exit(f"{app.key} holds real user data; snapshot/restore disabled")
-    assert app.container is not None
-    if not app.container.exists():
-        sys.exit(f"container not found: {app.container}")
+    src = _data_dir(app)
+    if not src.exists():
+        sys.exit(f"container Data not found: {src}")
     _quit(app)
     dest = _snapshot_dir(app)
     if dest.exists():
         stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
         dest.rename(dest.with_name(f"{app.key}-old-{stamp}"))
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(app.container, dest, symlinks=True)
-    print(f"snapshot: {app.container} -> {dest}")
+    shutil.copytree(src, dest, symlinks=True)
+    print(f"snapshot: {src} -> {dest}")
     return 0
 
 
 def cmd_restore(app: App) -> int:
     if not app.resettable:
         sys.exit(f"{app.key} holds real user data; snapshot/restore disabled")
-    assert app.container is not None
+    dst = _data_dir(app)
     src = _snapshot_dir(app)
     if not src.exists():
         sys.exit(f"no snapshot for {app.key}; run snapshot first")
     _quit(app)
-    if app.container.exists():
-        shutil.rmtree(app.container)
-    shutil.copytree(src, app.container, symlinks=True)
-    print(f"restored {app.container} from {src}")
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst, symlinks=True)
+    print(f"restored {dst} from {src}")
     return 0
 
 
