@@ -31,7 +31,12 @@ per-claim confidence. Summary of what this reader consumes:
 
 Strokes are stored as fitted cubic Bezier chains; this reader flattens
 each segment at SAMPLES_PER_SEGMENT parameter steps and interpolates the
-per-anchor width multipliers across the samples.
+per-anchor width multipliers across the samples. One exception keeps
+write->read point-stable: a segment whose control points sit at the
+bit-exact f32 thirds of its chord is the lossless straight-line encoding
+our own writer emits, and flattens to just its end anchor (app-fitted
+curves never match bit-for-bit; the fixture's closest segment is 9e-4 pt
+off the thirds while the writer's are 0 by construction).
 
 Caveat: the op log has only been observed for freshly-drawn notes
 (create + add-stroke ops). Erase/move/undo semantics are unmapped, so an
@@ -129,6 +134,26 @@ class _Table:
         return self.buf[t + 4:t + 4 + n]
 
 
+def _f32(v: float) -> float:
+    """Round to the nearest binary32 — the precision the blob stores."""
+    return struct.unpack("<f", struct.pack("<f", v))[0]
+
+
+def _is_linear(x0: float, y0: float, c1, c2, end) -> bool:
+    """True iff the controls are the f32-exact thirds of the chord.
+
+    This is precisely (and only) the encoding ``writer.encode_point_blob``
+    produces: it rounds anchors to f32 *before* computing the thirds, so
+    the stored controls are bit-identical to this recomputation from the
+    decoded anchors. Exact equality means an app-fitted curve can never
+    be collapsed by accident."""
+    dx, dy = end[0] - x0, end[1] - y0
+    return (c1[0] == _f32(x0 + dx / 3.0)
+            and c1[1] == _f32(y0 + dy / 3.0)
+            and c2[0] == _f32(x0 + 2.0 * dx / 3.0)
+            and c2[1] == _f32(y0 + 2.0 * dy / 3.0))
+
+
 def decode_point_blob(blob: bytes) -> tuple[list, list[float]]:
     """-> ([(c1, c2, end) segments, origin-relative], anchor width mults)."""
     coord_fmt, npts, three = struct.unpack_from("<BHB", blob, 0)
@@ -161,13 +186,21 @@ def _flatten(segments: list, widths: list[float],
     x0 = y0 = 0.0
     for k, (c1, c2, end) in enumerate(segments):
         w0, w1 = widths[k], widths[k + 1]
-        for j in range(1, samples + 1):
-            t = j / samples
-            u = 1.0 - t
-            b0, b1, b2, b3 = u * u * u, 3 * u * u * t, 3 * u * t * t, t ** 3
-            xs.append(b0 * x0 + b1 * c1[0] + b2 * c2[0] + b3 * end[0])
-            ys.append(b0 * y0 + b1 * c1[1] + b2 * c2[1] + b3 * end[1])
-            ws.append(w0 + (w1 - w0) * t)
+        if _is_linear(x0, y0, c1, c2, end):
+            # lossless polyline segment (our writer's encoding): the end
+            # anchor is the only real datum — no interpolated samples
+            xs.append(end[0])
+            ys.append(end[1])
+            ws.append(w1)
+        else:
+            for j in range(1, samples + 1):
+                t = j / samples
+                u = 1.0 - t
+                b0, b1 = u * u * u, 3 * u * u * t
+                b2, b3 = 3 * u * t * t, t ** 3
+                xs.append(b0 * x0 + b1 * c1[0] + b2 * c2[0] + b3 * end[0])
+                ys.append(b0 * y0 + b1 * c1[1] + b2 * c2[1] + b3 * end[1])
+                ws.append(w0 + (w1 - w0) * t)
         x0, y0 = end
     return xs, ys, ws
 

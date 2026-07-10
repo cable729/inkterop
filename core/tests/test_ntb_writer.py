@@ -19,6 +19,7 @@ from inkterop.formats.notability.fb import FbBuilder
 from inkterop.formats.notability.ntb import (
     NtbReader,
     _Table,
+    _flatten,
     decode_point_blob,
 )
 from inkterop.formats.notability.writer import (
@@ -134,6 +135,21 @@ def test_point_blob_inverts_reader():
     assert c2 == pytest.approx((20.0 / 3.0, 0.0))
 
 
+def test_point_blob_flatten_returns_input_polyline():
+    # encode -> decode -> flatten is the writer/reader geometry core: it
+    # must return EXACTLY the input anchors (f32-rounded), never invent
+    # interpolated samples — the invariant behind .ntb cycle stability.
+    xs = [0.0, 10.1, 10.1, -5.55, 3.7]  # non-f32-exact on purpose
+    ys = [0.0, 0.25, 20.0, 20.25, -8.125]
+    mults = [1.25, 1.0, 0.5, 0.375, 2.0]
+    segments, widths = decode_point_blob(encode_point_blob(xs, ys, mults))
+    fx, fy, fw = _flatten(segments, widths)
+    assert len(fx) == len(xs)
+    assert fx == pytest.approx(xs, abs=1e-5)
+    assert fy == pytest.approx(ys, abs=1e-5)
+    assert fw == pytest.approx(mults)
+
+
 def test_point_blob_single_anchor():
     blob = encode_point_blob([0.0], [0.0], [1.0])
     assert len(blob) == 18
@@ -226,11 +242,11 @@ def test_synthetic_round_trip(tmp_path):
         # colors are exact bytes both ways
         assert (b.color.r, b.color.g, b.color.b) == (
             a.color.r, a.color.g, a.color.b)
-        # reader flattening resamples: every read-back point must lie on
-        # the written polyline (linear cubics), anchors round-trip in f32
-        assert _max_deviation(b.x, b.y, a.x, a.y) <= 0.1
-        assert b.x[0] == pytest.approx(a.x[0], abs=1e-4)
-        assert b.y[-1] == pytest.approx(a.y[-1], abs=1e-4)
+        # point-stable round-trip: exactly the written anchors come back
+        # (f32 precision), no interpolated samples
+        assert len(b) == len(a)
+        assert b.x == pytest.approx(a.x, abs=1e-3)
+        assert b.y == pytest.approx(a.y, abs=1e-3)
 
     pen_b, pencil_b, hl_b, dot_b = bk_strokes
     # base widths (payload field_8): median for variable, exact for constant
@@ -299,6 +315,8 @@ def test_fixture_round_trip(tmp_path):
     src_strokes = list(src.pages[0].strokes())
     bk_strokes = list(back.pages[0].strokes())
     assert len(src_strokes) == 4 and len(bk_strokes) == 4
+    # the fixture's own parse is ground truth for the reader
+    assert sum(len(s) for s in src_strokes) == 1964
 
     for a, b in zip(src_strokes, bk_strokes):
         assert b.tool.family is a.tool.family
@@ -310,12 +328,26 @@ def test_fixture_round_trip(tmp_path):
             a.appearance.opacity, abs=1 / 255)
         assert b.tool.native.params["width"] == pytest.approx(
             a.tool.native.params["width"])
-        # per-stroke extents within 0.5 pt
-        assert min(b.x) == pytest.approx(min(a.x), abs=0.5)
-        assert max(b.x) == pytest.approx(max(a.x), abs=0.5)
-        assert min(b.y) == pytest.approx(min(a.y), abs=0.5)
-        assert max(b.y) == pytest.approx(max(a.y), abs=0.5)
+        # POINT-STABLE round-trip (the 4x-inflation regression guard):
+        # exactly the source points come back, pointwise, in f32
+        assert len(b) == len(a)
+        assert b.x == pytest.approx(a.x, abs=1e-3)
+        assert b.y == pytest.approx(a.y, abs=1e-3)
         assert _max_deviation(b.x, b.y, a.x, a.y) <= 0.1
+
+    # second generation: write(read(write(read(x)))) must stay stable in
+    # point count, geometry, and file size (no growth per cycle)
+    out2 = tmp_path / "rt2.ntb"
+    NtbWriter().write(back, out2, Fidelity.EXACT)
+    bk2_strokes = list(NtbReader().read(out2).pages[0].strokes())
+    assert len(bk2_strokes) == 4
+    for b, b2 in zip(bk_strokes, bk2_strokes):
+        assert len(b2) == len(b)
+        assert b2.x == pytest.approx(b.x, abs=1e-3)
+        assert b2.y == pytest.approx(b.y, abs=1e-3)
+        assert (b2.channels[ir.Channel.WIDTH]
+                == pytest.approx(b.channels[ir.Channel.WIDTH], rel=1e-2))
+    assert out2.stat().st_size == out.stat().st_size
 
     assert back.title == src.title
     assert back.metadata["created_unix_ms"] == src.metadata["created_unix_ms"]

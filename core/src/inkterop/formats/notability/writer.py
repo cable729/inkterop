@@ -8,10 +8,12 @@ below all carry the fixture-observed values (see
 docs/formats/notability.md, ".ntb" section, for per-claim confidence).
 
 Geometry: strokes are polylines in the IR, but .ntb stores fitted cubic
-Bezier chains. We emit one *exactly linear* cubic per polyline segment
-(control points at 1/3 and 2/3 of the chord), so the reader's uniform
-flattening reproduces the written polyline verbatim — every read-back
-sample lies on the written segments and every anchor round-trips as f32.
+Bezier chains. We emit one *exactly linear* cubic per polyline segment,
+with anchors rounded to their stored f32 values BEFORE the control
+points are computed at 1/3 and 2/3 of the chord — so the controls are
+bit-identical to the reader's recomputed thirds, its exact linearity
+check fires, and read-back returns the written polyline point-for-point
+(every anchor round-trips as f32, no interpolated samples are invented).
 Per-anchor pressure profiles ride the f16 width-multiplier channel.
 
 Multi-page: the op log has only been observed single-page-scoped (the
@@ -42,7 +44,13 @@ from ... import ir
 from ..base import Fidelity
 from .._scale import unit_factor
 from .fb import FbBuilder
-from .ntb import FORMAT_ID, OP_DOC_METADATA, OP_STROKE, TOOL_FAMILIES
+from .ntb import (
+    FORMAT_ID,
+    OP_DOC_METADATA,
+    OP_STROKE,
+    TOOL_FAMILIES,
+    _f32,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -82,7 +90,12 @@ def encode_point_blob(xs: list[float], ys: list[float],
     """Origin-relative polyline -> the [verified] .ntb point-blob framing.
 
     coord_fmt 1 (f32 coords) always; one exactly-linear cubic segment per
-    polyline segment. Inverse of ntb.decode_point_blob."""
+    polyline segment. Inverse of ntb.decode_point_blob: anchors are
+    rounded to f32 *before* the thirds are taken, so the stored control
+    points match the reader's ntb._is_linear recomputation bit-for-bit
+    and flattening collapses each segment back to its end anchor."""
+    xs = [_f32(v) for v in xs]
+    ys = [_f32(v) for v in ys]
     n = len(xs)
     if n > 0xFFFF:
         raise ValueError(f".ntb point blob caps at 65535 anchors (got {n})")
