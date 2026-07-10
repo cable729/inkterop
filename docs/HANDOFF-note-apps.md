@@ -23,6 +23,48 @@ Registry: 19 readers / 12 writers.
   point timestamps deltas (they are cumulative ms — see
   `docs/formats/boox.md`).
 
+## Writer-validation state (2026-07-09, after three app-open rounds)
+
+Full evidence per writer in `docs/validated-writes.md`. Summary:
+
+- **Excalidraw: VALIDATED** (in-browser vs the official 0.18.0 package;
+  found+fixed an ~8× width bug — the freedraw rendering law is measured
+  and documented in `docs/formats/excalidraw.md`).
+- **Saber: app-opens PASS** (round-trip byte-identical to the app's own
+  main.sbn2 after the unsigned-ARGB / raw-tool-options / empty-page-key
+  fixes). Residual: imported notes lack a library preview until edited
+  (app-side); flip to validated after one more confirm.
+- **reMarkable .rmdoc: container ACCEPTED via drag-and-drop** (File →
+  Import never accepts .rmdoc — picker is pdf/epub only). Rebuilt as a
+  cache-doc replica. Remaining: stroke render fidelity — round-trip is
+  close-but-not-identical (ops-diff the written .rm vs fixture next);
+  Saber→rm tool mapping renders wrong (hollow pen outline, sparse-dot
+  pencil, solid highlighter).
+- **GoodNotes: round 3 pending.** Round 1 missing members (now full
+  10-member set incl. background-PDF attachment); round 2 "missing
+  document id" → the doc UUID lives only in index.events.pb, writer now
+  synthesizes document-created + attachment-added events (decoded from
+  the export's event records).
+- **Notability: builder ACCEPTED** (rm-to-notability imports and
+  renders). Round-1 FlatBuffers error was our builder: field packing
+  order, no vtable dedup, misaligned+zeroed root struct — all fixed.
+  Round-2 lesson: the app REJECTS duplicate note UUIDs on import
+  (writer now always writes a fresh UUID). Round 3 (roundtrip + B with
+  fresh UUIDs) pending.
+- Cross-writer fix from visual feedback: per-point ALPHA (reMarkable
+  pencil texture) now flattens to median stroke opacity in the
+  excalidraw, Saber and .ntb writers.
+
+**Debugging method that worked** (use it for the remaining rounds):
+diff our output against a real app-made file at the right level
+(BSON fields / zip members / protobuf records / FlatBuffers vtables —
+`tools/re/fbwalk.py` + the vtable dumper), fix to byte-faithful where
+possible, and stage A/B bisection files (`*-A-fixture-copy`,
+`*-B-our-bundle-real-rest`) so each human import round is maximally
+diagnostic. Also: the tldraw/excalidraw rendering laws were measured by
+importing the official npm packages in a browser and probing their
+export functions — reusable for any web-based target.
+
 ## Validation queue (gates `validated=True`)
 
 Written samples staged in the local `corpus/validate/` (gitignored):
