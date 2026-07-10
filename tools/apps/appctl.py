@@ -50,9 +50,14 @@ APPS = {
     "goodnotes": App("goodnotes", "Goodnotes", "com.goodnotesapp.x",
                      HOME / "Library/Containers/com.goodnotesapp.x",
                      resettable=True),
+    # NOT resettable: Notability's note library does NOT live in the
+    # container Data dir (no group container either — likely CloudKit
+    # with a local cache). Restoring Data reverts prefs/onboarding but
+    # not the library, and left the app's import path silently broken
+    # (2026-07-10 round 3). Clean up notes IN-APP instead.
     "notability": App("notability", "Notability", "com.gingerlabs.Notability",
                       HOME / "Library/Containers/com.gingerlabs.Notability",
-                      resettable=True),
+                      resettable=False),
     "saber": App("saber", "Saber", "com.adilhanney.saber",
                  HOME / "Library/Containers/com.adilhanney.saber",
                  resettable=True),
