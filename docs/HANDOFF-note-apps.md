@@ -1,8 +1,45 @@
 # Handoff — note-apps complete in/out workstream
 
-Status snapshot, 2026-07-09. Companion to `docs/ROADMAP.md` (M2 section);
-this file carries the working detail that doesn't belong in the roadmap.
-Like `HANDOFF.md`, it is excluded from the docs website.
+Status snapshot, 2026-07-09 (updated late evening). Companion to
+`docs/ROADMAP.md` (M2 section); this file carries the working detail that
+doesn't belong in the roadmap. Like `HANDOFF.md`, it is excluded from the
+docs website.
+
+## Interchange architecture + fidelity harness (landed 2026-07-09 late)
+
+Decided (approved plan) and implemented:
+
+- **Pixel-diff harness** `core/src/inkterop/visual/` + `inkterop
+  visualdiff`: thresholds calibrated, not assumed (method + numbers in
+  `visual/README.md`; strict golden bar 99.99% ink-match, registered-mode
+  same-content floor ~96.6%). Pixel goldens in `tests/golden/visual/`
+  guard the pinned renderer across 3 source formats; NEVER regenerate to
+  silence a red test.
+- **Interchange**: UIM 3.1 as the stroke layer inside the `.inkz` zip
+  container (`docs/formats/inkz.md`); per-stroke `overlay.json` carries
+  what UIM can't (its size = running fitness measure; matrix in
+  `docs/formats/uim.md`). Our renderer is PINNED as the source of truth
+  for "what it looks like". Fallback if UIM misfits accumulate: hardened
+  IR + SVG carrier (plan file has the analysis).
+- **Loop proven on Xournal++** (headless, no UI): both directions through
+  `.inkz` at 100% registered ink-match (`tests/test_visual_crossapp.py`).
+  Two standing rules learned: interop render comparisons must use
+  `--normalize native`; compare the app's export against our render of
+  the FILE WE WROTE (the delta vs the source doc is the target format's
+  expressiveness loss, a different number).
+- **App driver**: `tools/apps/appctl.py` (headless Xournal++; container
+  snapshot/restore for trial apps; refuses reMarkable/OneNote/Apple
+  Notes). GoodNotes free tier caps at 3 notebooks — end every session
+  with the scratch notes deleted.
+- **Docs standard**: `docs/formats/STYLE.md` — protocol.md/rendering.md
+  split, byte-level with worked examples; migrate each format when its
+  rendering rule gets measured (reMarkable exemplar first).
+
+Waiting on the maintainer (morning): **iPad calibration pages**
+(`docs/calibration-pages.md` — the drawing script) and a **computer-use
+access grant** for the GoodNotes/Notability round-3 app-open checks
+(staged files in `corpus/validate/` regenerated with the fixed writers;
+containers snapshot via appctl before any import).
 
 ## What landed (this branch)
 
