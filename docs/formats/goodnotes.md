@@ -1,7 +1,9 @@
 # GoodNotes (.goodnotes) format
 
-Status: **ink strokes + color + pen-type field decoded** across both
-observed schema versions. Verified against public GoodNotes 6 samples
+Status: **ink strokes + color + pen-type field decoded across both
+schema versions; schema-25 journal structure + events-log page model
+decoded; same-format round-trip imports and renders in GoodNotes Mac
+(2026-07-09 round 3)**. Verified against public GoodNotes 6 samples
 (schema 24) AND a controlled Mac-app export (GoodNotes 6, Mac App Store,
 2026-07-09, schema 25 — committed as
 `core/tests/fixtures/goodnotes/gn-mac-mixed-pens.goodnotes`). Open: pen-type
@@ -32,7 +34,7 @@ thumbnail.jpg            page-1 preview
 notes/<UUID>             one file PER PAGE: stroke records (see below)
 attachments/<UUID>       embedded PDFs (page backgrounds / imports)
 index.notes.pb           document/page index (protobuf)
-index.events.pb          [unknown] (edit history?)
+index.events.pb          event journal; holds the DOC UUID + PAGE LIST (below)
 index.search.pb          [unknown] (handwriting search index?)
 index.attachments.pb     attachment index (protobuf)
 schema.pb                2 bytes: field 1 varint = schema version
@@ -43,13 +45,34 @@ search/<UUID>            schema 25+: tiny per-page blobs [unknown]
 
 ## Page files `notes/<UUID>` `[verified]`
 
-A stream of length-delimited protobuf records: `<varint len><message>`,
-repeated. Two record shapes observed:
+A stream of length-delimited protobuf records: `<varint len><message>`.
+The record STRUCTURE differs by schema version, and the app enforces it
+at import (established 2026-07-09 by import bisection against GoodNotes
+Mac — swapping single members into a real container until it broke):
 
-- **Metadata records** — fields `1` (36-char UUID string), `2` (8 bytes),
-  `3` (varint), `8`/`9` (varints; look like timestamps/sequence numbers
-  `[inferred]`), `16` (varint 24 = schema version `[inferred]`).
-- **Stroke records** — a single field `7` containing the stroke message.
+**Schema 24** (public iPad-era samples) — flat: one metadata record
+(fields `1` uuid, `2`, `3`, `8`/`9` varints, `16` = 24), then stroke
+records (a single field `7` each).
+
+**Schema 25** (Mac exports) — an event JOURNAL of strict
+`(header, payload)` record PAIRS `[verified]`:
+
+```
+header  := {1: event-uuid (36 chars), 2: version-msg {1: seq, 2: nonce},
+            8: device-id (u62, same value as index.events.pb),
+            9: item index (unique small int), 14: session const, 16: 24}
+payload := stroke record {7: stroke-msg}   (ink)
+         | {9: page-item msg}              (shapes/lasso items: bbox
+                                            floats + item uuid + color)
+```
+
+Pairing rules `[verified by import behavior]`: the payload's stroke
+uuid (field 1) REPEATS the header's event uuid, and the stroke's field
+15 is a byte-exact ECHO of the header's field-2 version msg. An
+unpaired stroke record fails import with
+`SwiftProtobuf.BinaryDecodingError error 2`; per-record version fields
+stay **24** even in schema-25 files (only `schema.pb` and the journal
+shape change).
 
 ## Stroke message (inside record field #7)
 
@@ -172,6 +195,31 @@ experimental. Emits IR strokes with a WIDTH channel and
 `STROKED_VARIABLE` appearance; tool family is always PEN until the
 pen-type field is found.
 
+## index.events.pb — the document's source of truth `[verified 2026-07-09]`
+
+A stream of `<varint len><record>` protobuf records. The app derives the
+document from THIS journal at import — `index.notes.pb` alone is just a
+storage index. Records observed in a real Mac export, in order:
+
+| record | top field | role |
+|---|---|---|
+| 0 | 30 | document-created: doc uuid, title+version, first-page ref, `"P"`, `"auto"`, timestamps (double ms + varint ms), device id, schema 24 |
+| 1 | 6 | attachment-added: attachment uuid ×2, byte size, doc uuid |
+| 2 | 2 | **paper definition**: attachment ref, scale 29.333…, page size floats (834.24 × 1078.825 for "standard"), paper name string (`"<uuid>_standard_1_1 - Yellow"`), margins struct |
+| 3 | 54 | **page-created**: page ENTITY uuid, paper ref, lexicographic ORDER KEY (e.g. `"43elQ2"`), page colors |
+| 4 | 10 | view state (`PagingViewServiceUpdater:…`) — optional |
+| 5 | 105 | **page-link**: page number, doc uuid, page CONTENT uuid (= the `notes/<uuid>` member name), `"auto"` |
+| 6–10 | 104/105/102 | further view/settings events — optional |
+
+Import behavior `[verified by iteration]`: without records 2/54/105 the
+container imports but shows **zero pages**. The page ENTITY uuid (54)
+and page CONTENT uuid (105 / member name) are allocated ADJACENTLY:
+`entity = content − 1` (last hex group decremented). With random entity
+uuids the page materializes but stays blank; with the adjacency the ink
+attaches `[inferred from one sample + confirmed import behavior]`. The
+device id (varint, ~62 bits) is shared between the events journal and
+every page-journal header.
+
 ## Writer (experimental, validated=False)
 
 `core/src/inkterop/formats/goodnotes/writer.py` — the exact inverse of the
@@ -186,10 +234,19 @@ Mac app-import check passes (docs/validated-writes.md). What it emits:
   (index.events.pb, index.search.pb, index.attachments.pb,
   document.info.pb, search/) are not written — whether the app tolerates
   their absence is `[unknown]`.
-- **Page stream**: a leading metadata record (field 1 = page UUID,
-  field 16 = schema version 24), then one stroke record per IR stroke
-  (record field 7 = stroke message with fields 1 uuid / 2 geometry /
-  4 color / 7 pen type / 21 schema version).
+- **Page stream**: branches on the source schema version (captured by
+  the reader in `doc.extra["goodnotes"]["schema_version"]`). Schema 24:
+  flat metadata record + stroke records. Schema 25: the (header, payload)
+  journal pairs described above; round-trips REPLAY the source stroke
+  message byte-faithfully with only the journal linkage fields (1 uuid,
+  15 echo) rewritten — the app's geometry blobs carry per-pen sections
+  our minimal encoder can't rebuild, and a re-encoded brush stroke
+  renders as a blob in-app. The first (header, page-item) pair is
+  replayed verbatim from `page.extra["goodnotes"]["meta_record"/"meta_payload"]`.
+- **Events journal**: document-created, attachment-added, paper
+  definition, and per-page page-created + page-link records (see the
+  events section) — the import-blocking set as of GoodNotes Mac 6
+  (2026-07-09).
 - **Geometry**: every stroke uses the pressure-pen tpl signature
   (`vA(v)A(u)A(u)A(v)A(v)A(u)A(u)A(u)A(u)A(v)`) with a 3-float anchor and
   flat (x, y, width) triplets; the constant-width/pencil/brush section
@@ -225,6 +282,16 @@ Mac app-import check passes (docs/validated-writes.md). What it emits:
 
 ## Changelog
 
+- 2026-07-09 (round 3, autonomous app loop): schema-25 page-file JOURNAL
+  structure decoded (header/payload pairs, uuid+echo linkage) via import
+  bisection; events-log page model decoded (paper/page-created/page-link
+  records, entity = content−1 adjacency); writer branches per schema and
+  replays source stroke messages verbatim on round-trips. RESULT:
+  goodnotes-roundtrip imports + renders fully in GoodNotes Mac. Open:
+  foreign (synthesized) geometry — the app accepts but does not RENDER
+  our minimal tpl sections under schema 25, and rejects flat schema-24
+  containers outright; next step is decoding the remaining pressure-pen
+  sections (self-drawn Mac probes now feasible with app control).
 - 2026-07-09 (night): experimental writer (validated=False): wire/LZ4/tpl
   encoders as exact decoder inverses; minimal container; pressure-pen
   triplet geometry for all pen types; fixture write→read round-trip green.
