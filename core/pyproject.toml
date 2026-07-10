@@ -25,6 +25,9 @@ inkterop = "inkterop.cli:main"
 dev = [
     "hypothesis>=6.156.4",
     "pytest>=8.0",
+    # Wacom's Apache-2.0 reference implementation (imports as `uim`):
+    # TEST-ONLY oracle for the UIM writer; never a runtime dependency.
+    "universal-ink-library>=2.1",
 ]
 docs = [
     "mkdocs-material>=9.5",

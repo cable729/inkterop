@@ -25,6 +25,7 @@ def _load() -> None:
     from .excalidraw import ExcalidrawReader, ExcalidrawWriter
     from .goodnotes import GoodnotesReader, GoodnotesWriter
     from .inkml import InkmlReader, InkmlWriter
+    from .inkz import InkzReader, InkzWriter
     from .irjson import IrJsonReader, IrJsonWriter
     from .isf import IsfReader
     from .nebo import NeboReader
@@ -36,7 +37,7 @@ def _load() -> None:
     from .saber import SaberReader, SaberWriter
     from .sdocx import SdocxReader
     from .svg import SvgReader, WriteReader
-    from .uim import UimReader
+    from .uim import UimReader, UimWriter
     from .supernote import SupernoteReader, SupernoteWriter
     from .tldraw import TldrawReader
     from .xopp import XoppReader, XoppWriter
@@ -47,12 +48,12 @@ def _load() -> None:
         NtbReader(), BooxReader(), SaberReader(), NeboReader(),
         ExcalidrawReader(),
         # WriteReader before SvgReader: both claim .svg, first detect() wins
-        WriteReader(), SvgReader(), UimReader(), IsfReader(),
+        WriteReader(), SvgReader(), UimReader(), InkzReader(), IsfReader(),
         SdocxReader(), OneNoteReader(), PkDrawingReader(), TldrawReader(),
     ])
     _WRITERS.extend([
         PdfWriter(), PngWriter(), IrJsonWriter(), XoppWriter(), InkmlWriter(),
-        SvgWriter(),
+        SvgWriter(), UimWriter(), InkzWriter(),
         SaberWriter(), ExcalidrawWriter(),
         RemarkablePageWriter(), RmdocWriter(), SupernoteWriter(),
         GoodnotesWriter(), NtbWriter(),
