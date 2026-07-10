@@ -100,23 +100,31 @@ each record:
   u32 ngroups       span-group count — 1 in most records; Apple-Pencil
                     pages emit multi-group records (e.g. 3)  [verified]
   ngroups x:
-    u16 3   u16 span_start
-    u32 g           usually == stroke index                 [inferred]
+    u16 3   u16 span_start   sample offset within the FIRST stroke
+    u32 first_stroke  first stroke record of the tagged run  [verified]
     u8 u8           usually 05 ff; 01 00 on one partial-span CHAR
-    u16 span_end    last sample index of the span (n-1 for full-stroke
-                    tags; CHAR spans split at recognition boundaries)
-    u32 stroke_idx  ("h") — consistent with span lengths even where g
-                    is not; the reader uses this one            [inferred]
+    u16 span_end    last sample index within the LAST stroke (n-1 for
+                    full-stroke tags; CHAR spans split at recognition
+                    boundaries)
+    u32 last_stroke first == last for single-stroke tags; record
+                    indices count tombstones                 [verified]
   u32 str_len + utf-8 payload (may be empty; shared by all groups)
 ```
+
+A tag covers the inclusive stroke-record range
+`[first_stroke, last_stroke]` (verified on the calibration page:
+`HIGHLIGHT_STROKES`/`brush-0500` carries `first=28, last=35`, exactly
+the 8 highlighter strokes, with `span_end = 34` = the last stroke's
+final sample; every pen run's `.STYLE` ranges tile the pen strokes).
 
 New tag names seen on Apple-Pencil pages: `active-pen-input` (input
 device marker), `component-brush`, `brush-oriented`, and highlighter
 styling `"-myscript-pen-pressure-sensitivity: 0;color:#FFDD3366"`
-(alpha byte in the color). Open question: a `HIGHLIGHT_STROKES` /
-brush record appears to anchor only ONE stroke of a drawn row of 8 —
-whether the tag legally covers a run of strokes (and which) is
-unresolved; the reader currently styles only the anchor stroke.
+(alpha byte in the color). The former open question — a
+`HIGHLIGHT_STROKES`/brush record seeming to anchor only ONE stroke of
+a drawn row of 8 — is resolved: the record's two stroke fields are a
+first/last range and the tag covers the whole run; the reader now
+styles every stroke in it.
 
 Observed record names, per stroke:
 
@@ -165,15 +173,16 @@ by the reader.
   is constant f=255 — how the app renders those (speed-based?) is
   `[unknown]`, so they keep the constant-width appearance from the
   brush name.
-- Style tags only reach a run's anchor stroke (tag-run gap, open
-  question below), but the app's export renders *every* pen stroke
-  force-varying; the reader assumes the app-default sensitivity 0.8
-  for unstyled pen strokes `[inferred]`.
+- Style tags cover their whole stroke-record range (first/last fields,
+  see the tag table above), so every pen stroke normally carries its
+  `.STYLE` sensitivity; the reader still assumes the app-default 0.8
+  for pen strokes left unstyled (e.g. an unparseable tag table)
+  `[inferred]`.
 - Highlighter: `#FFDD3366`, 5 mm, drawn as a translucent band.
-- PDF export lane: the app's PDF export of the calibration page does
-  not register against our render yet (our page size bug — Letter vs
-  A4 — plus a ~4% content-aspect delta); use the SVG lane as the
-  geometry oracle for now.
+- PDF export lane: registers now that convert defaults to native page
+  sizing (A4 out for A4 in) and tags style whole runs — 68% registered
+  ink-match on the calibration page; the remainder is cap shape and
+  width-law detail. The SVG lane stays the finer geometry oracle.
 
 ## Validation
 

@@ -36,9 +36,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="skip output-path safety checks")
     c.add_argument("--normalize", choices=["uniform", "native"],
                    default=None,
-                   help="PDF/PNG page sizing: uniform (fixed target page, "
-                        "the mirror default) or native (source page size — "
-                        "use for cross-app fidelity comparisons)")
+                   help="PDF/PNG page sizing: native (source page size) "
+                        "or uniform (fixed target page). Default: native, "
+                        "except reMarkable sources (uniform, the validated "
+                        "mirror mapping)")
     v = sub.add_parser("visualdiff",
                        help="pixel-compare two PDFs page by page")
     v.add_argument("a", type=Path, help="reference PDF")

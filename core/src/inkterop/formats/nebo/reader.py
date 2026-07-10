@@ -23,9 +23,13 @@ BINK v5, all little-endian, byte-packed:
     u8 f[n]               -- force, 255 = full/no pressure sensor
   tag table: u32 0, u32 count, u8 0, then `count` records
     (record 0 has no head; the rest: u32 kind, u32 id, u32 0):
-    u32 name_len, name, u32 1, u16 3, u16 span_start, u32 g,
-    u8 u8 (usually 05 ff), u16 span_end, u32 stroke_idx, u32 str_len,
+    u32 name_len, name, u32 1, u16 3, u16 span_start, u32 first_stroke,
+    u8 u8 (usually 05 ff), u16 span_end, u32 last_stroke, u32 str_len,
     [utf-8 string]
+  A tag covers the stroke-record range [first_stroke, last_stroke]
+  inclusive (record indices count tombstones); span_start/span_end are
+  point offsets within the first/last stroke of the run. Single-stroke
+  tags have first == last.
   Tag names carry tool/brush ("pen-025", "brush-0500"), styling
   (".STYLE" with CSS like "color:#RRGGBBAA;-myscript-pen-pressure-
   sensitivity: 0.57;"), grouping (HIGHLIGHT_STROKES, TEXT_STROKES)
@@ -121,7 +125,8 @@ def parse_bink(data: bytes) -> dict:
     """Parse one ink.bink blob into {"strokes": [...], "tags": [...]}.
 
     Strokes: x/y in mm, f 0-255, t0 in us since epoch.
-    Tags: {"name", "stroke", "span", "text"} — tag-table records.
+    Tags: {"name", "first", "last", "span", "text"} — tag-table records;
+    a tag covers stroke records first..last inclusive.
     """
     if data[:5] != b"BINK\x00":
         raise BinkError("bad magic")
@@ -187,14 +192,15 @@ def parse_bink(data: bytes) -> dict:
             for _ in range(c.u32()):  # span-group count (1 in most records)
                 c.u16()
                 span_start = c.u16()
-                c.u32()  # g — matches stroke_idx except on page-level tags
+                first = c.u32()  # first stroke record of the tagged run
                 c.raw(2)  # usually 05 ff
                 span_end = c.u16()
-                stroke_idx = c.u32()
-                groups.append((stroke_idx, (span_start, span_end)))
+                last = c.u32()  # last stroke record (== first when single)
+                groups.append((first, last, (span_start, span_end)))
             text = c.string(65536)
-            for stroke_idx, span in groups:
-                tags.append({"name": name, "stroke": stroke_idx,
+            for first, last, span in groups:
+                tags.append({"name": name, "first": min(first, last),
+                             "last": max(first, last),
                              "span": span, "text": text})
     except BinkError as exc:
         # Geometry is already decoded; styling degrades to defaults.
@@ -237,9 +243,8 @@ def _ir_stroke(raw: dict, tag_names: list[str], style: dict,
     channels: dict[ir.Channel, list[float]] = {ir.Channel.PRESSURE: forces}
     sensitivity = style.get("pressure_sensitivity")
     if sensitivity is None and not highlight:
-        # Style tags only reach the run's anchor stroke (tag-run gap), but
-        # the app's export renders every pen stroke force-varying; 0.8 is
-        # the app default observed on the calibration page [inferred].
+        # Fallback for files whose tag table failed to parse; 0.8 is the
+        # app default observed on the calibration page [inferred].
         sensitivity = 0.8
     # Bake the measured rendering law into WIDTH when there is real force
     # data (capacitive input is constant 255; how the app renders those
@@ -295,7 +300,8 @@ def _page_from_zip(zf: zipfile.ZipFile, page_id: str) -> ir.Page:
     if bink:
         by_stroke: dict[int, list[dict]] = {}
         for tag in bink["tags"]:
-            by_stroke.setdefault(tag["stroke"], []).append(tag)
+            for rec in range(tag["first"], tag["last"] + 1):
+                by_stroke.setdefault(rec, []).append(tag)
         for idx, raw in enumerate(bink["strokes"]):
             tags = by_stroke.get(raw.get("rec", idx), [])
             names = [t["name"] for t in tags]

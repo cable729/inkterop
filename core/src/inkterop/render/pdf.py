@@ -206,7 +206,17 @@ class PdfWriter:
                     for p in doc.pages
                 ],
             )
-        render_document(doc, path, options.get("render_config"))
+        config = options.get("render_config")
+        if config is None:
+            # Default page sizing: honor the source page size (Nebo A4
+            # stays A4). Exception: reMarkable bounds are device units
+            # that ink can overflow in x (they grow in y only), so a
+            # native-size page would clip; its validated page mapping
+            # is the uniform Letter fit, same as the mirror.
+            config = RenderConfig(
+                normalize=("uniform" if doc.format_id == "remarkable"
+                           else "native"))
+        render_document(doc, path, config)
 
 
 def render_document(doc: ir.Document, out_pdf: Path,
