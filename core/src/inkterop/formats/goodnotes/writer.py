@@ -132,7 +132,9 @@ def _pen_type(s: ir.Stroke) -> int:
 
 
 def _stroke_record(s: ir.Stroke, k: float, x0: float, y0: float,
-                   fidelity: Fidelity) -> bytes:
+                   fidelity: Fidelity, stroke_uuid: str | None = None,
+                   echo: bytes | None = None,
+                   pen_nonce: int | None = None) -> bytes:
     triplets = [
         _clamp_point((x - x0) * k, (y - y0) * k, w)
         for x, y, w in zip(s.x, s.y, _widths(s, k, fidelity))
@@ -153,23 +155,83 @@ def _stroke_record(s: ir.Stroke, k: float, x0: float, y0: float,
                  + write_float32(3, color.b) + write_float32(4, opacity))
 
     # Pen type submessage: field 7 -> sub 1 -> field 1 varint; the app
-    # omits field 1 for pen type 0, mirror that.
+    # omits field 1 for pen type 0, mirror that. Schema-25 journals add a
+    # nonce as sub-field 2 (meaning [unknown]; present in all app records).
     pen_type = _pen_type(s)
     pen_inner = write_varint_field(1, pen_type) if pen_type else b""
+    if pen_nonce is not None:
+        pen_inner += write_varint_field(2, pen_nonce)
 
+    sid = stroke_uuid or str(uuid.uuid4()).upper()
     stroke_msg = (
-        write_len_delimited(1, str(uuid.uuid4()).upper().encode("ascii"))
+        write_len_delimited(1, sid.encode("ascii"))
         + write_len_delimited(2, apple_lz4_compress(_geometry_blob(triplets)))
-        + write_len_delimited(4, color_msg)
-        + write_len_delimited(7, write_len_delimited(1, pen_inner))
-        + write_varint_field(21, SCHEMA_VERSION)
     )
+    if echo is not None:
+        stroke_msg += write_varint_field(3, 1)
+    stroke_msg += write_len_delimited(4, color_msg)
+    if echo is not None:
+        stroke_msg += write_len_delimited(6, b"")
+    stroke_msg += write_len_delimited(7, write_len_delimited(1, pen_inner))
+    if echo is not None:
+        # fields observed in every schema-25 app stroke record: 9 empty
+        # msg, 15 = byte-exact echo of the header's field-2 version msg,
+        # 20 = {1: empty}. Version field 21 stays 24 even in schema-25
+        # files (observed in the Mac export).
+        stroke_msg += (write_len_delimited(9, b"")
+                       + write_len_delimited(15, echo)
+                       + write_len_delimited(20, write_len_delimited(1, b"")))
+    stroke_msg += write_varint_field(21, SCHEMA_VERSION)
     return write_len_delimited(7, stroke_msg)
+
+
+def _reserialize(raw: bytes, overrides: dict[int, bytes]) -> bytes:
+    """Re-emit a parsed message byte-faithfully, replacing the given
+    length-delimited fields in place (appending any not present)."""
+    import struct as _struct
+
+    from .wire import parse_message, write_tag
+
+    out = b""
+    todo = dict(overrides)
+    for f in parse_message(raw):
+        if f.number in todo:
+            out += write_len_delimited(f.number, todo.pop(f.number))
+        elif f.wire_type == 0:
+            out += write_varint_field(f.number, f.value)
+        elif f.wire_type == 1:
+            out += write_tag(f.number, 1) + _struct.pack("<d", f.value)
+        elif f.wire_type == 2:
+            out += write_len_delimited(f.number, f.value)
+        elif f.wire_type == 5:
+            out += write_tag(f.number, 5) + _struct.pack("<f", f.value)
+    for num, value in todo.items():
+        out += write_len_delimited(num, value)
+    return out
+
+
+def _journal_header(event_uuid: str, seq_msg: bytes, device_id: int,
+                    item_idx: int, session: int) -> bytes:
+    """Schema-25 page files are event journals: every payload record
+    (stroke or page item) is PRECEDED by one of these header records —
+    the app parses records pairwise, and an unpaired stroke record is a
+    SwiftProtobuf BinaryDecodingError at import (round-3 finding).
+    Fields: 1 = event UUID (the payload's stroke UUID repeats it),
+    2 = version msg (echoed as the payload's field 15), 8 = device id
+    (same value as the events log), 9 = per-page item index [inferred:
+    unique small int], 14 = session constant, 16 = 24."""
+    return (write_len_delimited(1, event_uuid.encode("ascii"))
+            + write_len_delimited(2, seq_msg)
+            + write_varint_field(8, device_id)
+            + write_varint_field(9, item_idx)
+            + write_varint_field(14, session)
+            + write_varint_field(16, SCHEMA_VERSION))
 
 
 def _meta_record(page_uuid: str) -> bytes:
     """Leading per-page metadata record (field 1 = UUID, field 16 =
-    schema version), as observed in the fixture; the reader skips it."""
+    schema version), as observed in schema-24 samples; the reader skips
+    it."""
     return (write_len_delimited(1, page_uuid.encode("ascii"))
             + write_varint_field(16, SCHEMA_VERSION))
 
@@ -197,7 +259,10 @@ def _nonce_msg(field: int, rng) -> bytes:
 
 
 def _events_log(doc_uuid: str, title: str, first_page_uuid: str,
-                att_uuid: str, att_size: int, now_ms: int) -> bytes:
+                att_uuid: str, att_size: int, now_ms: int,
+                device_id: int | None = None,
+                page_uuids: list[str] | None = None,
+                page_size_pt: tuple[float, float] = (834.24, 1078.825)) -> bytes:
     """Minimal index.events.pb: a document-created event + an
     attachment-added event, mirroring the first two records of the Mac
     export (schema decoded schema-less; field meanings [inferred]).
@@ -208,7 +273,8 @@ def _events_log(doc_uuid: str, title: str, first_page_uuid: str,
     import struct as _struct
 
     rng = random.Random()
-    device_id = rng.getrandbits(62)
+    if device_id is None:
+        device_id = rng.getrandbits(62)
 
     created = write_len_delimited(1, doc_uuid.encode("ascii")) + \
         write_len_delimited(30, b"".join([
@@ -246,7 +312,101 @@ def _events_log(doc_uuid: str, title: str, first_page_uuid: str,
             write_varint_field(15, now_ms),
             write_varint_field(16, SCHEMA_VERSION),
         ]))
-    return join_delimited([created, attached])
+    # Page materialization (round-3 finding, 2026-07-09): without these
+    # the app imports the container but shows ZERO pages — the page list
+    # lives in the events journal, not index.notes.pb. Mirrors records
+    # 2/3/5 of a real Mac export: a paper definition (field 2) referencing
+    # the background-PDF attachment, one page-created event (field 54) per
+    # page referencing the paper + a lexicographic order key, and one
+    # page-link record (field 105) carrying the page's CONTENT uuid (the
+    # notes/<uuid> member name).
+    paper_uuid = str(uuid.uuid4()).upper()
+    w_pt, h_pt = page_size_pt
+    paper = write_len_delimited(1, paper_uuid.encode("ascii")) + \
+        write_len_delimited(2, b"".join([
+            write_len_delimited(1, doc_uuid.encode("ascii")),
+            write_len_delimited(2, paper_uuid.encode("ascii")),
+            write_len_delimited(4, att_uuid.encode("ascii")),
+            write_varint_field(5, 1),
+            write_varint_field(6, 1),
+            _write_double(7, 29.33333396911621),
+            write_len_delimited(8, write_float32(1, w_pt)
+                                + write_float32(2, h_pt)),
+            write_len_delimited(
+                9, b"9FE8F365-4BEE-5057-8573-1A56C77CAC19_standard_1_"
+                   b"1 - Yellow"),
+            _write_double(10, float(now_ms)),
+            write_len_delimited(11, str(uuid.uuid4()).upper().encode()),
+            write_len_delimited(12, _write_double(1, 29.33333396911621)
+                                + _nonce_msg(2, rng)),
+            write_len_delimited(13, write_varint_field(1, 1)
+                                + _nonce_msg(2, rng)),
+            write_varint_field(15, device_id),
+            write_varint_field(16, now_ms),
+            write_len_delimited(17, write_varint_field(1, 1)
+                                + _nonce_msg(2, rng)),
+            write_len_delimited(18, b"".join([
+                write_len_delimited(1, b"".join([
+                    write_len_delimited(1, write_float32(1, 44.0)
+                                        + write_float32(2, 58.6666679)),
+                    write_len_delimited(2, write_float32(1, w_pt - 88.0)
+                                        + write_float32(2, h_pt - 117.33)),
+                ])),
+                write_float32(2, 28.4166679),
+                write_float32(3, 0.91666669),
+                write_varint_field(5, 1),
+            ])),
+            write_len_delimited(19, _nonce_msg(2, rng)),
+            write_varint_field(21, SCHEMA_VERSION),
+        ]))
+
+    records = [created, attached, paper]
+    _gray = write_float32(1, 0.86666667) + write_float32(2, 0.86666667) \
+        + write_float32(3, 0.86666667) + write_float32(4, 1.0)
+    _white = write_float32(1, 1.0) + write_float32(2, 1.0) \
+        + write_float32(3, 1.0) + write_float32(4, 1.0)
+    for i, page_uuid in enumerate(page_uuids or [first_page_uuid]):
+        # Page ENTITY uuid = page CONTENT uuid (the notes/<uuid> member
+        # name) minus one — the app allocates them adjacently and links
+        # entity -> content by this adjacency [inferred: single Mac
+        # export sample ...F0955F entity / ...F09560 content; confirmed
+        # by import behavior — random entity uuids leave the page blank].
+        head, tail = page_uuid.rsplit("-", 1)
+        entity_uuid = f"{head}-{int(tail, 16) - 1:012X}"
+        order_key = f"43el{chr(ord('Q') + i)}2"  # lexicographic page order
+        page_created = write_len_delimited(1, entity_uuid.encode("ascii")) + \
+            write_len_delimited(54, b"".join([
+                write_len_delimited(1, doc_uuid.encode("ascii")),
+                write_len_delimited(2, entity_uuid.encode("ascii")),
+                write_len_delimited(3, write_len_delimited(
+                    1, paper_uuid.encode("ascii")) + _nonce_msg(2, rng)),
+                write_len_delimited(4, write_len_delimited(
+                    1, order_key.encode("ascii")) + _nonce_msg(2, rng)),
+                _write_double(10, float(now_ms)),
+                write_len_delimited(11, str(uuid.uuid4()).upper().encode()),
+                write_varint_field(13, device_id),
+                write_varint_field(14, now_ms),
+                write_varint_field(15, SCHEMA_VERSION),
+                write_len_delimited(17, write_len_delimited(
+                    1, write_len_delimited(
+                        2, write_len_delimited(1, _gray)
+                        + write_len_delimited(2, _white)))
+                    + _nonce_msg(2, rng)),
+            ]))
+        page_link = write_len_delimited(1, page_uuid.encode("ascii")) + \
+            write_len_delimited(105, b"".join([
+                write_varint_field(1, i + 1),
+                write_len_delimited(2, doc_uuid.encode("ascii")),
+                write_len_delimited(4, page_uuid.encode("ascii")),
+                write_len_delimited(6, b"auto"),
+                _write_double(10, float(now_ms)),
+                write_len_delimited(11, str(uuid.uuid4()).upper().encode()),
+                write_varint_field(13, device_id),
+                write_varint_field(14, now_ms),
+                write_varint_field(15, SCHEMA_VERSION),
+            ]))
+        records += [page_created, page_link]
+    return join_delimited(records)
 
 
 def _blank_pdf(width_pt: float, height_pt: float) -> bytes:
@@ -268,6 +428,21 @@ def document_to_goodnotes(doc: ir.Document,
             "goodnotes stores device-rendered widths, not raw dynamics; "
             "use exact or native fidelity"
         )
+    import random as _random
+
+    # schema.pb must match the page-file structure: schema-24 page files
+    # are flat (meta record + stroke records), schema-25 files are event
+    # JOURNALS of (header, payload) record pairs. Writing 25-shaped
+    # records under a 24 schema.pb (or unpaired stroke records under 25)
+    # is a SwiftProtobuf BinaryDecodingError at import — round-3 finding,
+    # 2026-07-09. Per-record version fields stay 24 in BOTH shapes (the
+    # real schema-25 Mac export still writes 24 there).
+    schema = doc.extra.get("goodnotes", {}).get("schema_version",
+                                                SCHEMA_VERSION)
+    journal = schema >= 25
+    rng = _random.Random()
+    device_id = rng.getrandbits(62)
+    session = 5381  # constant observed across all records of an export
     pages: list[tuple[str, bytes]] = []
     for page in doc.pages:
         k = unit_factor(page, 1.0)  # GoodNotes units ARE PDF points
@@ -275,13 +450,39 @@ def document_to_goodnotes(doc: ir.Document,
         gn_extra = page.extra.get("goodnotes", {})
         page_uuid = gn_extra.get("page_uuid") or str(uuid.uuid4()).upper()
         meta_hex = gn_extra.get("meta_record")
-        records = [bytes.fromhex(meta_hex) if meta_hex
-                   else _meta_record(page_uuid)]
-        records += [
-            _stroke_record(s, k, b.x_min, b.y_min, fidelity)
-            for layer in page.layers if layer.visible
-            for s in layer.strokes if len(s.x) >= 1
-        ]
+        pair_hex = gn_extra.get("meta_payload")
+        strokes = [s for layer in page.layers if layer.visible
+                   for s in layer.strokes if len(s.x) >= 1]
+        if journal:
+            records = []
+            if meta_hex:
+                records.append(bytes.fromhex(meta_hex))
+                if pair_hex:
+                    records.append(bytes.fromhex(pair_hex))
+            for i, s in enumerate(strokes):
+                event_uuid = str(uuid.uuid4()).upper()
+                seq_msg = (write_varint_field(1, 2)
+                           + write_varint_field(2, rng.getrandbits(31)))
+                records.append(_journal_header(
+                    event_uuid, seq_msg, device_id, i + 10, session))
+                raw_hex = s.extra.get(FORMAT_ID, {}).get("record")
+                if raw_hex:
+                    # byte-faithful replay: only the journal linkage
+                    # fields (stroke uuid = header event uuid, field-15
+                    # echo of the header's version msg) are rewritten
+                    records.append(write_len_delimited(7, _reserialize(
+                        bytes.fromhex(raw_hex),
+                        {1: event_uuid.encode("ascii"), 15: seq_msg})))
+                else:
+                    records.append(_stroke_record(
+                        s, k, b.x_min, b.y_min, fidelity,
+                        stroke_uuid=event_uuid, echo=seq_msg,
+                        pen_nonce=rng.getrandbits(31)))
+        else:
+            records = [bytes.fromhex(meta_hex) if meta_hex
+                       else _meta_record(page_uuid)]
+            records += [_stroke_record(s, k, b.x_min, b.y_min, fidelity)
+                        for s in strokes]
         pages.append((page_uuid, join_delimited(records)))
 
     def _index(entries: list[tuple[str, str, bool]]) -> bytes:
@@ -302,7 +503,9 @@ def document_to_goodnotes(doc: ir.Document,
 
     events = _events_log(doc_uuid, doc.title or "inkterop export",
                          pages[0][0] if pages else str(uuid.uuid4()).upper(),
-                         att_uuid, len(pdf), int(_time.time() * 1000))
+                         att_uuid, len(pdf), int(_time.time() * 1000),
+                         device_id, page_uuids=[u for u, _ in pages],
+                         page_size_pt=(page_w, page_h))
 
     buf = io.BytesIO()
     # member order mirrors the observed Mac export
@@ -323,7 +526,7 @@ def document_to_goodnotes(doc: ir.Document,
         zf.writestr("index.attachments.pb",
                     _index([(att_uuid, f"attachments/{att_uuid}", False)]))
         zf.writestr(f"attachments/{att_uuid}", pdf)
-        zf.writestr("schema.pb", write_varint_field(1, SCHEMA_VERSION))
+        zf.writestr("schema.pb", write_varint_field(1, schema))
     return buf.getvalue()
 
 

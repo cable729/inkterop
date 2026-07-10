@@ -311,6 +311,12 @@ def _strokes_from_record(record: bytes) -> list[ir.Stroke]:
                 underlay=is_highlight,
             ),
         ))
+    if len(strokes) == 1:
+        # Raw stroke message, replayed by the writer with only the
+        # journal uuid/echo fields rewritten — the app's geometry blob
+        # carries per-point sections our minimal encoder can't rebuild
+        # (a re-encoded brush stroke renders as a blob in-app).
+        strokes[0].extra.setdefault(FORMAT_ID, {})["record"] = stroke_msg.hex()
     return strokes
 
 
@@ -365,6 +371,7 @@ class GoodnotesReader:
                 raw = zf.read(f"notes/{page_uuid}")
                 strokes = []
                 meta_record_hex = None
+                meta_payload_hex = None
                 if raw:
                     try:
                         records = split_delimited(raw)
@@ -378,10 +385,21 @@ class GoodnotesReader:
                         except WireError:
                             continue
                         if i == 0 and not found:
-                            # leading per-page metadata record — keep the
-                            # raw bytes so the writer can replay them
-                            # verbatim (fields largely [unknown])
+                            # leading per-page record — keep the raw bytes
+                            # so the writer can replay them verbatim. In
+                            # schema-25 journals this is an event HEADER
+                            # whose payload is the NEXT record; capture
+                            # that too (writer must replay the pair —
+                            # unpaired records fail app import).
                             meta_record_hex = rec.hex()
+                        elif (i == 1 and not found
+                              and meta_record_hex is not None):
+                            try:
+                                nums = set(fields_by_number(rec))
+                            except WireError:
+                                nums = set()
+                            if nums == {9}:
+                                meta_payload_hex = rec.hex()
                         strokes.extend(found)
                 # Page-dimension field is [unknown]; assume A4 but grow to
                 # the ink extents so nothing clips on larger papers.
@@ -402,10 +420,29 @@ class GoodnotesReader:
                         "page_uuid": page_uuid,
                         **({"meta_record": meta_record_hex}
                            if meta_record_hex else {}),
+                        **({"meta_payload": meta_payload_hex}
+                           if meta_payload_hex else {}),
                     }},
                 ))
+            schema_version = None
+            try:
+                raw_schema = zf.read("schema.pb")
+                if len(raw_schema) >= 2 and raw_schema[0] == 0x08:
+                    v, shift, pos = 0, 0, 1
+                    while pos < len(raw_schema):
+                        byte = raw_schema[pos]
+                        v |= (byte & 0x7F) << shift
+                        pos += 1
+                        if not byte & 0x80:
+                            break
+                        shift += 7
+                    schema_version = v
+            except KeyError:
+                pass
         return ir.Document(
             format_id=FORMAT_ID,
             title=path.stem,
             pages=pages,
+            extra=({"goodnotes": {"schema_version": schema_version}}
+                   if schema_version is not None else {}),
         )
