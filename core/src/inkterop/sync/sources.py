@@ -82,6 +82,9 @@ class RemarkableCacheSource:
     def __init__(self, cache_dir: Path | None = None):
         self._cache_dir = cache_dir
         self._lib = None
+        # The daemon lists concurrently (thumbnails + sync passes);
+        # Library.reload() mutates shared dicts, so serialize access.
+        self._lock = threading.Lock()
 
     def _library(self, reload: bool = False):
         from ..library import Library
@@ -100,24 +103,26 @@ class RemarkableCacheSource:
             return False
 
     def list_documents(self) -> list[SyncDoc]:
-        lib = self._library(reload=True)
-        out = []
-        for doc in lib.documents():
-            folder = lib.path_of(doc).as_posix()
-            out.append(SyncDoc(
-                source_id=self.id,
-                doc_id=doc.uuid,
-                name=doc.name,
-                folder="" if folder == "." else folder,
-                mtime=doc.last_modified,
-                kind=doc.file_type or "notebook",
-                page_count=len(doc.page_uuids),
-                native=doc,
-            ))
-        return out
+        with self._lock:
+            lib = self._library(reload=True)
+            out = []
+            for doc in lib.documents():
+                folder = lib.path_of(doc).as_posix()
+                out.append(SyncDoc(
+                    source_id=self.id,
+                    doc_id=doc.uuid,
+                    name=doc.name,
+                    folder="" if folder == "." else folder,
+                    mtime=doc.last_modified,
+                    kind=doc.file_type or "notebook",
+                    page_count=len(doc.page_uuids),
+                    native=doc,
+                ))
+            return out
 
     def watch_paths(self) -> list[Path]:
-        return [self._library().cache_dir]
+        with self._lock:
+            return [self._library().cache_dir]
 
     def to_ir(self, doc: SyncDoc, pen_style: str = "faithful") -> ir.Document:
         from ..formats.remarkable.reader import read_library_document

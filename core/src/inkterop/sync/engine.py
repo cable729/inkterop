@@ -236,6 +236,31 @@ class SyncEngine:
 
     # -- watching --------------------------------------------------------
 
+    def _acquire_watch_lock(self) -> bool:
+        """Advisory single-watcher lock (launchd daemon vs the app).
+
+        Returns False when another live process already watches — the
+        caller should skip watching (RPC service continues regardless).
+        """
+        import os
+        lock = self.status_path.with_name("watch.lock")
+        try:
+            pid = int(lock.read_text().strip())
+        except (OSError, ValueError):
+            pid = None
+        if pid is not None and pid != os.getpid():
+            try:
+                os.kill(pid, 0)  # raises if the pid is gone
+                _logger.warning(
+                    "another inkterop watcher (pid %d) is running; "
+                    "this process will not watch", pid)
+                return False
+            except (OSError, ProcessLookupError):
+                pass  # stale lock
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(str(os.getpid()))
+        return True
+
     def watch(self, debounce: float = 30.0,
               progress: ProgressFn | None = None,
               stop: threading.Event | None = None) -> None:
@@ -243,6 +268,11 @@ class SyncEngine:
         from watchdog.events import FileSystemEventHandler
         from watchdog.observers import Observer
 
+        if not self._acquire_watch_lock():
+            if progress:
+                progress("watcher-disabled",
+                         {"reason": "another watcher is running"})
+            return
         stop = stop or threading.Event()
         pending = {"t": 0.0}
 
@@ -281,6 +311,13 @@ class SyncEngine:
         finally:
             obs.stop()
             obs.join()
+            import os
+            lock = self.status_path.with_name("watch.lock")
+            try:
+                if lock.read_text().strip() == str(os.getpid()):
+                    lock.unlink()
+            except OSError:
+                pass
 
     # -- introspection (daemon / UI) ---------------------------------------
 
