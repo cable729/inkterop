@@ -81,15 +81,21 @@ class Rules:
     def rule_for(self, source_id: str, doc_id: str) -> DocRule:
         return self.docs.get(self.doc_key(source_id, doc_id), DocRule())
 
-    def _folder_rules(self, source_id: str, folder: str) -> list[DocRule]:
-        """Rules on the doc's folder or any ancestor, root-first."""
+    def folder_rules(self, source_id: str,
+                     folder: str) -> list[tuple[str, DocRule]]:
+        """(folder path, rule) on the doc's folder or any ancestor,
+        root-first."""
         out = []
         parts = PurePosixPath(folder).parts if folder else ()
         for i in range(len(parts) + 1):
-            key = f"{source_id}:{'/'.join(parts[:i])}"
+            path = "/".join(parts[:i])
+            key = f"{source_id}:{path}"
             if key in self.folders:
-                out.append(self.folders[key])
+                out.append((path, self.folders[key]))
         return out
+
+    def _folder_rules(self, source_id: str, folder: str) -> list[DocRule]:
+        return [r for _, r in self.folder_rules(source_id, folder)]
 
     def wanted(self, source_id: str, doc_id: str, folder: str = "") -> bool:
         """Does the current mode + rules include this document?"""

@@ -78,20 +78,44 @@ class SyncEngine:
     def load_rules(self) -> Rules:
         return Rules.load(self.rules_path)
 
-    def _wanted(self, doc: SyncDoc, rules: Rules) -> bool:
+    def _decide(self, doc: SyncDoc, rules: Rules) -> tuple[bool, str | None]:
+        """(wanted, exclusion reason code). Reason codes the UI understands:
+        note-rule, folder-rule:<path>, scope-notebooks/pdfs/epubs,
+        config-exclude, allowlist.
+
+        Precedence: an explicit note/folder allow OVERRIDES the scope
+        toggles (so opting a single annotated PDF in just works); a note
+        block always wins.
+        """
         cfg = self.cfg
-        if doc.kind == "notebook" and not cfg.notebooks:
-            return False
-        if doc.kind == "pdf" and not cfg.pdfs:
-            return False
-        if doc.kind == "epub" and not cfg.epubs:
-            return False
-        if doc.source_id == "remarkable":
-            # Legacy config.toml folder excludes, kept working.
-            if any(doc.folder == ex or doc.folder.startswith(ex + "/")
-                   for ex in cfg.exclude):
-                return False
-        return rules.wanted(doc.source_id, doc.doc_id, doc.folder)
+        rule = rules.rule_for(doc.source_id, doc.doc_id)
+        if rule.blocked:
+            return False, "note-rule"
+        frules = rules.folder_rules(doc.source_id, doc.folder)
+        explicit_allow = rule.allowed or any(r.allowed for _, r in frules)
+
+        if rules.mode == "allowlist":
+            return (True, None) if explicit_allow else (False, "allowlist")
+
+        blocked_folder = next((path for path, r in frules if r.blocked), None)
+        if blocked_folder is not None and not rule.allowed:
+            return False, f"folder-rule:{blocked_folder}"
+        if not explicit_allow:
+            if doc.kind == "notebook" and not cfg.notebooks:
+                return False, "scope-notebooks"
+            if doc.kind == "pdf" and not cfg.pdfs:
+                return False, "scope-pdfs"
+            if doc.kind == "epub" and not cfg.epubs:
+                return False, "scope-epubs"
+            if doc.source_id == "remarkable":
+                # Legacy config.toml folder excludes, kept working.
+                if any(doc.folder == ex or doc.folder.startswith(ex + "/")
+                       for ex in cfg.exclude):
+                    return False, "config-exclude"
+        return True, None
+
+    def _wanted(self, doc: SyncDoc, rules: Rules) -> bool:
+        return self._decide(doc, rules)[0]
 
     def _plan(self, doc: SyncDoc, rules: Rules) -> tuple[Path, str, str]:
         """(relative output dir, output name, sink format) after overrides."""
@@ -105,11 +129,30 @@ class SyncEngine:
 
     # -- the pass ------------------------------------------------------------
 
-    def sync_once(self, progress: ProgressFn | None = None) -> dict:
+    def sync_once(self, progress: ProgressFn | None = None,
+                  trigger: str = "manual") -> dict:
         with self._lock:
-            return self._sync_once_locked(progress)
+            return self._sync_once_locked(progress, trigger)
 
-    def _sync_once_locked(self, progress: ProgressFn | None) -> dict:
+    def _append_history(self, entry: dict) -> None:
+        path = self.status_path.with_name("history.json")
+        try:
+            hist = json.loads(path.read_text())
+            assert isinstance(hist.get("passes"), list)
+        except (OSError, json.JSONDecodeError, AssertionError):
+            hist = {"passes": []}
+        hist["passes"] = ([entry] + hist["passes"])[:200]
+        _write_json_atomic(path, hist)
+
+    def read_history(self) -> dict:
+        path = self.status_path.with_name("history.json")
+        try:
+            return json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return {"passes": []}
+
+    def _sync_once_locked(self, progress: ProgressFn | None,
+                          trigger: str = "manual") -> dict:
         def emit(event: str, **data) -> None:
             if progress:
                 try:
@@ -186,7 +229,8 @@ class SyncEngine:
                         for old in entry.get("outputs", []):
                             if old not in rels:
                                 (out_root / old).unlink(missing_ok=True)
-                    state["docs"][key] = {"mtime": doc.mtime, "outputs": rels}
+                    state["docs"][key] = {"mtime": doc.mtime, "outputs": rels,
+                                          "synced_at": int(time.time())}
                     live_outputs.update(rels)
                     rendered += 1
                     _logger.info("synced %s -> %s", key, rels[0])
@@ -231,6 +275,8 @@ class SyncEngine:
                    "removed": removed, "seconds": round(time.time() - t0, 1),
                    "documents": len(live_keys)}
         self.write_status(state="idle", failures=failures, **summary)
+        self._append_history({"time": int(time.time()), "trigger": trigger,
+                              "failures": failures, **summary})
         emit("pass-finished", **summary)
         return summary
 
@@ -283,7 +329,7 @@ class SyncEngine:
                 pending["t"] = time.time()
 
         _logger.info("initial pass")
-        self.sync_once(progress)
+        self.sync_once(progress, trigger="watch")
         obs = Observer()
         n_watched = 0
         for source in self.sources:
@@ -304,7 +350,7 @@ class SyncEngine:
                     continue
                 if pending["t"] and time.time() - pending["t"] > debounce:
                     pending["t"] = 0.0
-                    summary = self.sync_once(progress)
+                    summary = self.sync_once(progress, trigger="watch")
                     _logger.info("sync pass: %s", summary)
         except KeyboardInterrupt:
             pass
@@ -345,10 +391,10 @@ class SyncEngine:
             for doc in listed:
                 rel_dir, name, fmt = self._plan(doc, rules)
                 entry = state["docs"].get(doc.key)
-                wanted = self._wanted(doc, rules)
+                wanted, reason = self._decide(doc, rules)
                 expected = str(rel_dir / f"{name}{sinks.EXTENSIONS[fmt]}")
                 if not wanted:
-                    sync_state = "blocked"
+                    sync_state = "excluded"
                 elif (entry and entry.get("mtime") == doc.mtime
                         and expected in entry.get("outputs", [])
                         and all((out_root / o).exists()
@@ -362,10 +408,18 @@ class SyncEngine:
                     "id": doc.doc_id, "name": doc.name,
                     "folder": doc.folder, "mtime": doc.mtime,
                     "kind": doc.kind, "pages": doc.page_count,
-                    "state": sync_state, "format": fmt,
+                    "state": sync_state, "reason": reason,
+                    "synced_at": (entry or {}).get("synced_at"),
+                    "format": fmt,
                     "output": str(rel_dir / f"{name}{sinks.EXTENSIONS[fmt]}"),
                     "outputs": (entry or {}).get("outputs", []),
                     "rule": rule.to_dict(),
+                    # What convert.run accepts for this doc: the backing
+                    # file for file-based sources, the uuid for reMarkable
+                    # (read_input resolves library uuids).
+                    "convert_input": (str(doc.path) if doc.path
+                                      else doc.doc_id),
+                    "native_path": str(doc.path) if doc.path else None,
                 })
         return {"sources": src_infos, "docs": docs,
                 "output_dir": str(out_root), "mode": rules.mode}

@@ -40,7 +40,8 @@ def make_cache(root: Path, docs: dict[str, dict]) -> Path:
                 "lastModified": str(spec.get("mtime", 1000))}
         (cache / f"{uuid}.metadata").write_text(json.dumps(meta))
         if meta["type"] == "DocumentType":
-            content = {"fileType": "notebook", "orientation": "portrait",
+            content = {"fileType": spec.get("file_type", "notebook"),
+                       "orientation": "portrait",
                        "cPages": {"pages": [{"id": "p1"}]}}
             (cache / f"{uuid}.content").write_text(json.dumps(content))
             page_dir = cache / uuid
@@ -259,12 +260,66 @@ def test_snapshot_states(env):
     snap = engine.snapshot()
     assert snap["sources"][0]["id"] == "remarkable"
     states = {d["id"]: d["state"] for d in snap["docs"]}
-    assert states == {"doc-a": "pending", "doc-b": "blocked"}
+    assert states == {"doc-a": "pending", "doc-b": "excluded"}
+    reasons = {d["id"]: d["reason"] for d in snap["docs"]}
+    assert reasons == {"doc-a": None, "doc-b": "note-rule"}
 
     engine.sync_once()
     snap = engine.snapshot()
-    states = {d["id"]: d["state"] for d in snap["docs"]}
-    assert states == {"doc-a": "synced", "doc-b": "blocked"}
+    by_id = {d["id"]: d for d in snap["docs"]}
+    assert by_id["doc-a"]["state"] == "synced"
+    assert by_id["doc-a"]["synced_at"] is not None
+    assert by_id["doc-b"]["state"] == "excluded"
+    assert by_id["doc-a"]["convert_input"] == "doc-a"
+
+
+def test_scope_exclusion_reason_and_allow_override(env):
+    cfg, cache, engine = env
+    make_cache(cache.parent, {"doc-pdf": {"name": "A Book", "mtime": 3000,
+                                          "file_type": "pdf"}})
+    snap = engine.snapshot()
+    pdf = next(d for d in snap["docs"] if d["id"] == "doc-pdf")
+    assert pdf["state"] == "excluded" and pdf["reason"] == "scope-pdfs"
+
+    # An explicit note allow overrides the scope toggle.
+    rules = engine.load_rules()
+    rules.set_doc("remarkable", "doc-pdf", allowed=True)
+    rules.save(engine.rules_path)
+    snap = engine.snapshot()
+    pdf = next(d for d in snap["docs"] if d["id"] == "doc-pdf")
+    assert pdf["state"] == "pending" and pdf["reason"] is None
+    s = engine.sync_once()
+    assert s["failed"] == 0
+    assert (cfg.output_dir / "A Book.pdf").exists()
+
+    # A folder-level allow overrides scope for everything under it too.
+    rules.set_doc("remarkable", "doc-pdf", allowed=False)
+    rules.set_folder("remarkable", "School", allowed=True)
+    rules.save(engine.rules_path)
+    cfg.notebooks = False
+    snap = engine.snapshot()
+    by_id = {d["id"]: d for d in snap["docs"]}
+    assert by_id["doc-b"]["state"] != "excluded"      # School/, allowed
+    assert by_id["doc-a"]["reason"] == "scope-notebooks"
+
+
+def test_folder_rule_reason_names_folder(env):
+    _, _, engine = env
+    rules = engine.load_rules()
+    rules.set_folder("remarkable", "School", blocked=True)
+    rules.save(engine.rules_path)
+    snap = engine.snapshot()
+    b = next(d for d in snap["docs"] if d["id"] == "doc-b")
+    assert b["reason"] == "folder-rule:School"
+
+
+def test_history_recorded(env):
+    _, _, engine = env
+    engine.sync_once(trigger="manual")
+    engine.sync_once(trigger="watch")
+    hist = engine.read_history()
+    assert [p["trigger"] for p in hist["passes"][:2]] == ["watch", "manual"]
+    assert hist["passes"][1]["rendered"] == 2
 
 
 # ---------------------------------------------------------------------------

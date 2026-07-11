@@ -25,11 +25,57 @@ export interface DocInfo {
   mtime: number;
   kind: string;
   pages: number | null;
-  state: "synced" | "pending" | "failed" | "blocked";
+  state: "synced" | "pending" | "failed" | "excluded";
+  reason: string | null;
+  synced_at: number | null;
   format: string;
   output: string;
   outputs: string[];
   rule: DocRule;
+  convert_input: string;
+  native_path: string | null;
+}
+
+export interface HistoryPass {
+  time: number;
+  trigger: string;
+  rendered: number;
+  skipped: number;
+  failed: number;
+  removed: number;
+  seconds: number;
+  documents: number;
+  failures: { key: string; name: string; error: string }[];
+}
+
+/** "5m ago" formatting for epoch seconds or ms. */
+export function timeAgo(ts: number | null | undefined): string {
+  if (!ts) return "never";
+  const ms = ts > 1e12 ? ts : ts * 1000;
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+/** Human text for an exclusion reason code from the engine. */
+export function reasonText(reason: string | null | undefined): string {
+  if (!reason) return "";
+  if (reason === "note-rule") return "excluded — turned off for this note";
+  if (reason.startsWith("folder-rule:"))
+    return `excluded — folder "${reason.slice(12) || "(root)"}" is turned off`;
+  if (reason === "scope-notebooks")
+    return "excluded — notebooks are off (Settings → What to sync)";
+  if (reason === "scope-pdfs")
+    return "excluded — annotated PDFs are off (Settings → What to sync)";
+  if (reason === "scope-epubs")
+    return "excluded — annotated EPUBs are off (Settings → What to sync)";
+  if (reason === "config-exclude")
+    return "excluded — folder listed in config.toml [scope] exclude";
+  if (reason === "allowlist")
+    return "excluded — allowlist mode: not explicitly allowed";
+  return `excluded — ${reason}`;
 }
 
 export interface Snapshot {
@@ -93,6 +139,7 @@ export function thumbnailUrl(path: string): string {
 
 export const api = {
   library: () => rpc<Snapshot>("library.list"),
+  history: () => rpc<{ passes: HistoryPass[] }>("history.get"),
   syncNow: () => rpc<SyncSummary>("sync.now"),
   pause: () => rpc("sync.pause"),
   resume: () => rpc("sync.resume"),

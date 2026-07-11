@@ -1,12 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./App.css";
-import { api, onDaemonEvent, type DaemonEvent, type Snapshot } from "./rpc";
+import {
+  api,
+  onDaemonEvent,
+  timeAgo,
+  type DaemonEvent,
+  type Snapshot,
+} from "./rpc";
 import Library from "./views/Library";
-import Convert from "./views/Convert";
-import Activity, { type ActivityEntry } from "./views/Activity";
+import Convert, { type ConvertRequest } from "./views/Convert";
+import History, { type ActivityEntry } from "./views/History";
 import Settings from "./views/Settings";
+import { SyncIcon } from "./icons";
 
-type View = "library" | "convert" | "activity" | "settings";
+type View = "library" | "convert" | "history" | "settings";
 
 const MAX_LOG = 500;
 
@@ -16,15 +23,27 @@ export default function App() {
   const [daemonUp, setDaemonUp] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [log, setLog] = useState<ActivityEntry[]>([]);
-  const [lastSummary, setLastSummary] = useState<string>("");
+  const [lastSync, setLastSync] = useState<number | null>(null);
+  const [lastFailed, setLastFailed] = useState(0);
+  const [convertRequest, setConvertRequest] = useState<ConvertRequest | null>(
+    null,
+  );
+  const [, bumpClock] = useState(0);
 
   const refresh = useCallback(async () => {
+    const snap = await api.library(); // throws while the daemon is down
+    setSnapshot(snap);
+    setDaemonUp(true);
+  }, []);
+
+  const refreshStatus = useCallback(async () => {
     try {
-      setSnapshot(await api.library());
-      setDaemonUp(true);
+      const st = await api.status();
+      if (typeof st.time === "number" && st.state !== "syncing")
+        setLastSync(st.time as number);
+      if (typeof st.failed === "number") setLastFailed(st.failed as number);
     } catch {
-      setDaemonUp(false);
-      throw new Error("daemon not up");
+      /* daemon still starting */
     }
   }, []);
 
@@ -32,19 +51,22 @@ export default function App() {
     // The daemon may still be starting when the webview loads; poll until
     // the first snapshot lands, then rely on events.
     let stopped = false;
-    const tryOnce = () =>
-      refresh().then(
-        () => true,
-        () => false,
-      );
     (async () => {
       for (let i = 0; i < 40 && !stopped; i++) {
-        if (await tryOnce()) return;
-        await new Promise((r) => setTimeout(r, 1500));
+        try {
+          await refresh();
+          await refreshStatus();
+          return;
+        } catch {
+          await new Promise((r) => setTimeout(r, 1500));
+        }
       }
     })();
+    // Keep "x mins ago" fresh.
+    const tick = setInterval(() => bumpClock((n) => n + 1), 30000);
     return () => {
       stopped = true;
+      clearInterval(tick);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -54,6 +76,7 @@ export default function App() {
       if (ev.method === "daemon.ready") {
         setDaemonUp(true);
         refresh().catch(() => {});
+        refreshStatus();
         return;
       }
       if (ev.method === "daemon.died") {
@@ -66,10 +89,8 @@ export default function App() {
       if (kind === "pass-started") setSyncing(true);
       if (kind === "pass-finished") {
         setSyncing(false);
-        setLastSummary(
-          `last pass: ${p.rendered} rendered, ${p.skipped} unchanged` +
-            (Number(p.failed) ? `, ${p.failed} FAILED` : ""),
-        );
+        setLastSync(Math.floor(Date.now() / 1000));
+        setLastFailed(Number(p.failed) || 0);
         refresh().catch(() => {});
       }
       setLog((old) =>
@@ -82,12 +103,12 @@ export default function App() {
     return () => {
       un.then((f) => f());
     };
-  }, [refresh]);
+  }, [refresh, refreshStatus]);
 
-  const failedCount = useMemo(
-    () => log.filter((e) => e.event === "doc-failed").length,
-    [log],
-  );
+  function startConvert(req: ConvertRequest) {
+    setConvertRequest(req);
+    setView("convert");
+  }
 
   return (
     <div className="shell">
@@ -99,60 +120,81 @@ export default function App() {
           />
           Inkterop
         </div>
-        <button
-          className={view === "library" ? "active" : ""}
-          onClick={() => setView("library")}
-        >
-          Library
-        </button>
-        <button
-          className={view === "convert" ? "active" : ""}
-          onClick={() => setView("convert")}
-        >
-          Convert
-        </button>
-        <button
-          className={view === "activity" ? "active" : ""}
-          onClick={() => setView("activity")}
-        >
-          Activity{failedCount > 0 ? ` (${failedCount})` : ""}
-        </button>
-        <button
-          className={view === "settings" ? "active" : ""}
-          onClick={() => setView("settings")}
-        >
-          Settings
-        </button>
+        {(
+          [
+            ["library", "Library"],
+            ["convert", "Convert"],
+            ["history", "Sync History"],
+            ["settings", "Settings"],
+          ] as const
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            className={view === v ? "active" : ""}
+            onClick={() => setView(v)}
+          >
+            {label}
+          </button>
+        ))}
 
         <div className="sidebar-foot">
           <button
             className="primary"
             disabled={!daemonUp || syncing}
-            onClick={async () => {
+            onClick={() => {
+              setView("history"); // watch it happen
               setSyncing(true);
-              try {
-                await api.syncNow();
-              } finally {
-                setSyncing(false);
-                refresh().catch(() => {});
-              }
+              api
+                .syncNow()
+                .catch(() => {})
+                .finally(() => {
+                  setSyncing(false);
+                  refresh().catch(() => {});
+                });
             }}
           >
+            <SyncIcon
+              width={13}
+              height={13}
+              className={syncing ? "spin" : ""}
+            />{" "}
             {syncing ? "Syncing…" : "Sync Now"}
           </button>
-          <div className="statusline">
-            {daemonUp ? lastSummary || "engine ready" : "engine starting…"}
-          </div>
+          <button
+            className="statusline linkish"
+            title="Open sync history"
+            onClick={() => setView("history")}
+          >
+            {!daemonUp
+              ? "engine starting…"
+              : syncing
+                ? "syncing now…"
+                : `synced ${timeAgo(lastSync)}` +
+                  (lastFailed ? ` · ${lastFailed} failed` : "")}
+          </button>
         </div>
       </nav>
 
       <main className="content">
         {view === "library" && (
-          <Library snapshot={snapshot} onChanged={() => refresh().catch(() => {})} />
+          <Library
+            snapshot={snapshot}
+            onChanged={() => refresh().catch(() => {})}
+            onConvert={startConvert}
+          />
         )}
-        {view === "convert" && <Convert />}
-        {view === "activity" && <Activity entries={log} />}
-        {view === "settings" && <Settings onChanged={() => refresh().catch(() => {})} />}
+        {view === "convert" && (
+          <Convert
+            request={convertRequest}
+            onRequestConsumed={() => setConvertRequest(null)}
+          />
+        )}
+        {view === "history" && (
+          <History entries={log} syncing={syncing} />
+        )}
+        {view === "settings" && (
+          <Settings onChanged={() => refresh().catch(() => {})} />
+        )}
       </main>
     </div>
   );

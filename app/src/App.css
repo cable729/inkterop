@@ -716,6 +716,200 @@ button.linkish {
   color: var(--warn);
 }
 
+/* ---- shared bits (icons, search, status) ------------------------------- */
+
+.spin {
+  animation: spin 1.1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status-ico {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.ico-ok {
+  color: var(--ok);
+}
+.ico-warn {
+  color: var(--warn);
+}
+.ico-bad {
+  color: var(--bad);
+}
+.ico-dim {
+  color: var(--dim);
+}
+
+.kind-ico {
+  color: var(--muted);
+  flex: none;
+}
+
+.chev {
+  color: var(--muted);
+  flex: none;
+}
+
+.col-item.active .kind-ico,
+.col-item.active .chev,
+.col-item.active .status-ico {
+  color: var(--accent-ink);
+}
+
+.sync-check {
+  flex: none;
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.searchbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 3px 8px;
+  background: var(--bg);
+  color: var(--muted);
+  flex: none;
+}
+
+.searchbox input {
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  width: 150px;
+  outline: none;
+}
+
+.searchbox select {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  outline: none;
+}
+
+.th-sort {
+  cursor: pointer;
+  user-select: none;
+}
+
+.th-sort:hover {
+  color: var(--ink);
+}
+
+.meta-right {
+  margin-left: auto;
+  display: inline-flex;
+}
+
+.action-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-col button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+/* ---- history ----------------------------------------------------------- */
+
+.history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 24px 40px;
+}
+
+.history h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 22px 0 8px;
+}
+
+.live-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.row-failed {
+  color: var(--bad);
+}
+
+.row-expand td {
+  background: color-mix(in srgb, var(--bad) 6%, transparent);
+}
+
+.fail-line {
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+
+.empty-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.pending-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.pending-item .primary {
+  border: none;
+  border-radius: 7px;
+  padding: 7px 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.statusline.linkish {
+  text-align: left !important;
+  font-size: 11px !important;
+  color: var(--muted) !important;
+  padding: 0 4px 2px !important;
+}
+
+.statusline.linkish:hover {
+  color: var(--accent) !important;
+}
+
 /* ---- activity ---------------------------------------------------------- */
 
 .activity {

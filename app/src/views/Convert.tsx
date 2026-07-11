@@ -1,13 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { api } from "../rpc";
+
+/** A conversion started from elsewhere in the app (Library inspector):
+ * `input` is whatever convert.run accepts — a file path or a reMarkable
+ * library uuid. */
+export interface ConvertRequest {
+  input: string;
+  name: string;
+}
+
+interface Item {
+  input: string;
+  name: string;
+}
 
 interface Job {
   input: string;
+  name: string;
   output?: string;
-  state: "queued" | "converting" | "done" | "error";
+  state: "converting" | "done" | "error";
   detail?: string;
 }
 
@@ -37,11 +51,18 @@ function stripExt(p: string): string {
   return i > 0 ? b.slice(0, i) : b;
 }
 
-export default function Convert() {
+export default function Convert({
+  request,
+  onRequestConsumed,
+}: {
+  request: ConvertRequest | null;
+  onRequestConsumed: () => void;
+}) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [fmt, setFmt] = useState("pdf");
   const [fidelity, setFidelity] = useState("exact");
   const [dragOver, setDragOver] = useState(false);
+  const [pendingItem, setPendingItem] = useState<Item | null>(null);
   const fmtRef = useRef(fmt);
   fmtRef.current = fmt;
   const fidRef = useRef(fidelity);
@@ -53,7 +74,9 @@ export default function Convert() {
       else if (event.payload.type === "leave") setDragOver(false);
       else if (event.payload.type === "drop") {
         setDragOver(false);
-        void convertFiles(event.payload.paths);
+        void convertItems(
+          event.payload.paths.map((p) => ({ input: p, name: stripExt(p) })),
+        );
       }
     });
     return () => {
@@ -62,30 +85,39 @@ export default function Convert() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function convertFiles(paths: string[]) {
-    if (paths.length === 0) return;
+  // A note handed over from the Library: show it queued; the user picks
+  // the target format, then hits Convert.
+  useEffect(() => {
+    if (request) {
+      setPendingItem({ input: request.input, name: request.name });
+      onRequestConsumed();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request]);
+
+  async function convertItems(items: Item[]) {
+    if (items.length === 0) return;
     const format = fmtRef.current;
     const experimental = !OUT_FORMATS.find((f) => f.ext === format)?.validated;
 
-    for (const input of paths) {
-      const suggested = `${stripExt(input)}.${format}`;
+    for (const item of items) {
       const output = await save({
-        title: `Save ${basename(input)} as ${format}`,
-        defaultPath: suggested,
+        title: `Save "${item.name}" as ${format}`,
+        defaultPath: `${item.name}.${format}`,
       });
-      if (!output) continue; // user cancelled this file
+      if (!output) continue;
       setJobs((j) => [
-        { input, output, state: "converting" },
+        { input: item.input, name: item.name, output, state: "converting" },
         ...j,
       ]);
       try {
-        const res = await api.convert(input, output, {
+        const res = await api.convert(item.input, output, {
           fidelity: fidRef.current,
           experimental,
         });
         setJobs((j) =>
           j.map((job) =>
-            job.input === input && job.output === output
+            job.input === item.input && job.output === output
               ? {
                   ...job,
                   state: "done",
@@ -97,7 +129,7 @@ export default function Convert() {
       } catch (e) {
         setJobs((j) =>
           j.map((job) =>
-            job.input === input && job.output === output
+            job.input === item.input && job.output === output
               ? { ...job, state: "error", detail: String(e) }
               : job,
           ),
@@ -115,8 +147,12 @@ export default function Convert() {
             multiple: true,
             title: "Choose note files to convert",
           });
-          if (picked)
-            void convertFiles(Array.isArray(picked) ? picked : [picked]);
+          if (picked) {
+            const paths = Array.isArray(picked) ? picked : [picked];
+            void convertItems(
+              paths.map((p) => ({ input: p, name: stripExt(p) })),
+            );
+          }
         }}
       >
         <div className="dropzone-big">Drop note files here</div>
@@ -150,23 +186,52 @@ export default function Convert() {
         </label>
       </div>
 
+      {pendingItem && (
+        <div className="pending-item">
+          <span>
+            From your library: <strong>{pendingItem.name}</strong>
+          </span>
+          <button
+            className="primary"
+            onClick={() => {
+              const item = pendingItem;
+              setPendingItem(null);
+              if (item) void convertItems([item]);
+            }}
+          >
+            Convert…
+          </button>
+          <button className="linkish" onClick={() => setPendingItem(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
       {jobs.length > 0 && (
         <ul className="joblist">
           {jobs.map((j, i) => (
             <li key={i} className={`job job-${j.state}`}>
               <span className="job-name" title={j.input}>
-                {basename(j.input)} → {j.output ? basename(j.output) : "…"}
+                {j.name} → {j.output ? basename(j.output) : "…"}
               </span>
-              <span className="job-state">
-                {j.state === "done" ? j.detail : j.state === "error" ? j.detail : j.state}
-              </span>
+              <span className="job-state">{j.detail ?? j.state}</span>
               {j.state === "done" && j.output && (
-                <button
-                  className="linkish"
-                  onClick={() => revealItemInDir(j.output!).catch(console.error)}
-                >
-                  Reveal
-                </button>
+                <>
+                  <button
+                    className="linkish"
+                    onClick={() => openPath(j.output!).catch(console.error)}
+                  >
+                    Open
+                  </button>
+                  <button
+                    className="linkish"
+                    onClick={() =>
+                      revealItemInDir(j.output!).catch(console.error)
+                    }
+                  >
+                    Reveal
+                  </button>
+                </>
               )}
             </li>
           ))}

@@ -22,7 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from ..config import Config
-from .engine import STATUS_PATH, SyncEngine
+from .engine import SyncEngine
 from .rules import Rules
 from .sinks import EXTENSIONS
 
@@ -85,12 +85,15 @@ class Daemon:
 
     def rpc_status_get(self):
         try:
-            return json.loads(STATUS_PATH.read_text())
+            return json.loads(self.engine.status_path.read_text())
         except (OSError, json.JSONDecodeError):
             return {"state": "unknown"}
 
+    def rpc_history_get(self):
+        return self.engine.read_history()
+
     def rpc_sync_now(self):
-        return self.engine.sync_once(self._progress)
+        return self.engine.sync_once(self._progress, trigger="manual")
 
     def rpc_sync_pause(self):
         self.engine.paused.set()
@@ -186,7 +189,8 @@ class Daemon:
         try:
             doc = convert(Path(input), Path(output),
                           fidelity=Fidelity(fidelity), pages=pages,
-                          experimental=experimental, options=options)
+                          experimental=experimental, options=options,
+                          cache_dir=self.cfg.remarkable_cache_dir)
         except ConvertError as e:
             raise RpcError(1, str(e))
         return {"output": output, "pages": len(doc.pages),
