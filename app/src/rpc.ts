@@ -27,6 +27,7 @@ export interface DocInfo {
   pages: number | null;
   state: "synced" | "pending" | "failed" | "excluded";
   reason: string | null;
+  error: string | null;
   synced_at: number | null;
   format: string;
   output: string;
@@ -34,6 +35,15 @@ export interface DocInfo {
   rule: DocRule;
   convert_input: string;
   native_path: string | null;
+}
+
+export interface HistoryDocResult {
+  key: string;
+  name: string;
+  action: "synced" | "failed";
+  outputs?: string[];
+  error?: string;
+  seconds: number;
 }
 
 export interface HistoryPass {
@@ -46,6 +56,7 @@ export interface HistoryPass {
   seconds: number;
   documents: number;
   failures: { key: string; name: string; error: string }[];
+  docs?: HistoryDocResult[];
 }
 
 /** "5m ago" formatting for epoch seconds or ms. */
@@ -67,10 +78,9 @@ export function reasonText(reason: string | null | undefined): string {
     return `excluded — folder "${reason.slice(12) || "(root)"}" is turned off`;
   if (reason === "scope-notebooks")
     return "excluded — notebooks are off (Settings → What to sync)";
-  if (reason === "scope-pdfs")
-    return "excluded — annotated PDFs are off (Settings → What to sync)";
-  if (reason === "scope-epubs")
-    return "excluded — annotated EPUBs are off (Settings → What to sync)";
+  if (reason === "unsupported-kind")
+    return "can't sync — annotated PDFs/EPUBs need the base-page merge " +
+      "(planned); only the handwriting would render";
   if (reason === "config-exclude")
     return "excluded — folder listed in config.toml [scope] exclude";
   if (reason === "allowlist")

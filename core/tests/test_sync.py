@@ -273,27 +273,28 @@ def test_snapshot_states(env):
     assert by_id["doc-a"]["convert_input"] == "doc-a"
 
 
-def test_scope_exclusion_reason_and_allow_override(env):
+def test_pdf_epub_hard_excluded(env):
     cfg, cache, engine = env
     make_cache(cache.parent, {"doc-pdf": {"name": "A Book", "mtime": 3000,
                                           "file_type": "pdf"}})
     snap = engine.snapshot()
     pdf = next(d for d in snap["docs"] if d["id"] == "doc-pdf")
-    assert pdf["state"] == "excluded" and pdf["reason"] == "scope-pdfs"
+    assert pdf["state"] == "excluded" and pdf["reason"] == "unsupported-kind"
 
-    # An explicit note allow overrides the scope toggle.
+    # NOTHING overrides the hard exclusion — not even an explicit allow.
     rules = engine.load_rules()
     rules.set_doc("remarkable", "doc-pdf", allowed=True)
     rules.save(engine.rules_path)
     snap = engine.snapshot()
     pdf = next(d for d in snap["docs"] if d["id"] == "doc-pdf")
-    assert pdf["state"] == "pending" and pdf["reason"] is None
-    s = engine.sync_once()
-    assert s["failed"] == 0
-    assert (cfg.output_dir / "A Book.pdf").exists()
+    assert pdf["state"] == "excluded" and pdf["reason"] == "unsupported-kind"
+    engine.sync_once()
+    assert not (cfg.output_dir / "A Book.pdf").exists()
 
-    # A folder-level allow overrides scope for everything under it too.
-    rules.set_doc("remarkable", "doc-pdf", allowed=False)
+
+def test_folder_allow_overrides_notebook_scope(env):
+    cfg, _, engine = env
+    rules = engine.load_rules()
     rules.set_folder("remarkable", "School", allowed=True)
     rules.save(engine.rules_path)
     cfg.notebooks = False
@@ -301,6 +302,35 @@ def test_scope_exclusion_reason_and_allow_override(env):
     by_id = {d["id"]: d for d in snap["docs"]}
     assert by_id["doc-b"]["state"] != "excluded"      # School/, allowed
     assert by_id["doc-a"]["reason"] == "scope-notebooks"
+
+
+def test_failed_state_surfaces_error(env, monkeypatch):
+    cfg, cache, engine = env
+    from inkterop.sync import engine as engine_mod
+
+    def boom(*a, **k):
+        raise RuntimeError("render exploded")
+
+    monkeypatch.setattr(engine_mod.sinks, "write_doc", boom)
+    engine.sync_once()
+    snap = engine.snapshot()
+    a = next(d for d in snap["docs"] if d["id"] == "doc-a")
+    assert a["state"] == "failed"
+    assert "render exploded" in a["error"]
+    # Per-doc diagnostics land in the history entry.
+    hist = engine.read_history()
+    docs = hist["passes"][0]["docs"]
+    assert all(d["action"] == "failed" for d in docs) and len(docs) == 2
+    assert "render exploded" in docs[0]["error"]
+
+    # After a fix, the doc recovers and the error clears.
+    monkeypatch.undo()
+    engine.sync_once()
+    snap = engine.snapshot()
+    a = next(d for d in snap["docs"] if d["id"] == "doc-a")
+    assert a["state"] == "synced" and a["error"] is None
+    docs = engine.read_history()["passes"][0]["docs"]
+    assert {d["action"] for d in docs} == {"synced"}
 
 
 def test_folder_rule_reason_names_folder(env):

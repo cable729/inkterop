@@ -181,6 +181,7 @@ export default function App() {
             snapshot={snapshot}
             onChanged={() => refresh().catch(() => {})}
             onConvert={startConvert}
+            onOpenHistory={() => setView("history")}
           />
         )}
         {view === "convert" && (

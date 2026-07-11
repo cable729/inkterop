@@ -80,14 +80,19 @@ class SyncEngine:
 
     def _decide(self, doc: SyncDoc, rules: Rules) -> tuple[bool, str | None]:
         """(wanted, exclusion reason code). Reason codes the UI understands:
-        note-rule, folder-rule:<path>, scope-notebooks/pdfs/epubs,
+        unsupported-kind, note-rule, folder-rule:<path>, scope-notebooks,
         config-exclude, allowlist.
 
-        Precedence: an explicit note/folder allow OVERRIDES the scope
-        toggles (so opting a single annotated PDF in just works); a note
-        block always wins.
+        Annotated PDFs/EPUBs are hard-excluded (maintainer decision
+        2026-07-10): without the base-page merge, rendering them would
+        produce handwriting floating on blank pages. Nothing overrides
+        this — not even an explicit allow. Otherwise, an explicit
+        note/folder allow overrides the scope toggles and a note block
+        always wins.
         """
         cfg = self.cfg
+        if doc.kind in ("pdf", "epub"):
+            return False, "unsupported-kind"
         rule = rules.rule_for(doc.source_id, doc.doc_id)
         if rule.blocked:
             return False, "note-rule"
@@ -103,10 +108,6 @@ class SyncEngine:
         if not explicit_allow:
             if doc.kind == "notebook" and not cfg.notebooks:
                 return False, "scope-notebooks"
-            if doc.kind == "pdf" and not cfg.pdfs:
-                return False, "scope-pdfs"
-            if doc.kind == "epub" and not cfg.epubs:
-                return False, "scope-epubs"
             if doc.source_id == "remarkable":
                 # Legacy config.toml folder excludes, kept working.
                 if any(doc.folder == ex or doc.folder.startswith(ex + "/")
@@ -170,6 +171,7 @@ class SyncEngine:
 
         rendered = skipped = failed = 0
         failures: list[dict] = []
+        doc_results: list[dict] = []  # per-doc outcomes for diagnostics
         live_keys: set[str] = set()
         live_outputs: set[str] = set()
         t0 = time.time()
@@ -218,6 +220,7 @@ class SyncEngine:
                     continue
 
                 emit("doc-started", key=key, name=doc.name, format=fmt)
+                t_doc = time.time()
                 try:
                     written = sinks.write_doc(
                         fmt, source, doc, out_root / rel_dir, name,
@@ -234,18 +237,30 @@ class SyncEngine:
                     live_outputs.update(rels)
                     rendered += 1
                     _logger.info("synced %s -> %s", key, rels[0])
+                    doc_results.append({
+                        "key": key, "name": doc.name, "action": "synced",
+                        "outputs": rels,
+                        "seconds": round(time.time() - t_doc, 2)})
                     emit("doc-synced", key=key, name=doc.name, outputs=rels)
                 except Exception as e:
                     failed += 1
+                    error = f"{type(e).__name__}: {e}"
                     failures.append({"key": key, "name": doc.name,
-                                     "error": str(e)})
+                                     "error": error})
+                    doc_results.append({
+                        "key": key, "name": doc.name, "action": "failed",
+                        "error": error,
+                        "seconds": round(time.time() - t_doc, 2)})
                     _logger.warning("failed to sync %s", key, exc_info=True)
-                    emit("doc-failed", key=key, name=doc.name, error=str(e))
+                    emit("doc-failed", key=key, name=doc.name, error=error)
                     # Keep previous outputs (if any) rather than deleting a
-                    # good older render because a new one failed.
-                    if entry:
-                        live_outputs.update(entry.get("outputs", []))
-                        state["docs"][key] = entry
+                    # good older render because a new one failed; remember
+                    # the error so the UI can show a 'failed' state.
+                    entry = dict(entry or {})
+                    live_outputs.update(entry.get("outputs", []))
+                    entry["error"] = error
+                    entry["failed_mtime"] = doc.mtime
+                    state["docs"][key] = entry
 
         # Remove outputs of docs that are gone, blocked, or out of scope.
         removed = 0
@@ -276,7 +291,8 @@ class SyncEngine:
                    "documents": len(live_keys)}
         self.write_status(state="idle", failures=failures, **summary)
         self._append_history({"time": int(time.time()), "trigger": trigger,
-                              "failures": failures, **summary})
+                              "failures": failures, "docs": doc_results,
+                              **summary})
         emit("pass-finished", **summary)
         return summary
 
@@ -400,6 +416,11 @@ class SyncEngine:
                         and all((out_root / o).exists()
                                 for o in entry.get("outputs", []))):
                     sync_state = "synced"
+                elif (entry and entry.get("error")
+                        and entry.get("failed_mtime") == doc.mtime):
+                    # The last attempt at THIS version failed; it will be
+                    # retried next pass, but show the error meanwhile.
+                    sync_state = "failed"
                 else:
                     sync_state = "pending"
                 rule = rules.rule_for(doc.source_id, doc.doc_id)
@@ -409,6 +430,8 @@ class SyncEngine:
                     "folder": doc.folder, "mtime": doc.mtime,
                     "kind": doc.kind, "pages": doc.page_count,
                     "state": sync_state, "reason": reason,
+                    "error": (entry or {}).get("error")
+                             if sync_state == "failed" else None,
                     "synced_at": (entry or {}).get("synced_at"),
                     "format": fmt,
                     "output": str(rel_dir / f"{name}{sinks.EXTENSIONS[fmt]}"),

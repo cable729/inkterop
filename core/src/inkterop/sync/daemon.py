@@ -48,6 +48,8 @@ class Daemon:
         self._out_lock = threading.Lock()
         self._stop = threading.Event()
         self._watch_thread: threading.Thread | None = None
+        self._resync_lock = threading.Lock()
+        self._resync_timer: threading.Timer | None = None
 
     # -- plumbing ---------------------------------------------------------
 
@@ -67,6 +69,26 @@ class Daemon:
         """Config changed: reload it and re-instantiate sources."""
         self.cfg = Config.load(self.cfg.path)
         self.engine = SyncEngine(self.cfg)
+
+    def _schedule_sync(self, delay: float = 2.0) -> None:
+        """Run a sync pass shortly after a rules/config change (the file
+        watcher only sees SOURCE changes, so without this a toggled
+        checkbox would sit 'pending' until the library next changed)."""
+        with self._resync_lock:
+            if self._resync_timer is not None:
+                self._resync_timer.cancel()
+
+            def run():
+                if not self.engine.paused.is_set():
+                    try:
+                        self.engine.sync_once(self._progress,
+                                              trigger="settings")
+                    except Exception:
+                        _logger.exception("rules-change sync failed")
+
+            self._resync_timer = threading.Timer(delay, run)
+            self._resync_timer.daemon = True
+            self._resync_timer.start()
 
     # -- methods ------------------------------------------------------------
 
@@ -111,6 +133,7 @@ class Daemon:
     def rpc_config_set(self, changes: dict):
         self.cfg.update_file(changes)
         self._rebuild_engine()
+        self._schedule_sync()
         return self.cfg.to_dict()
 
     def rpc_rules_get(self):
@@ -122,6 +145,7 @@ class Daemon:
             raise RpcError(-32602, f"bad mode {mode!r}")
         rules.mode = mode
         rules.save(self.engine.rules_path)
+        self._schedule_sync()
         return rules.to_dict()
 
     def rpc_rules_set_doc(self, source: str, id: str, **fields):
@@ -131,6 +155,7 @@ class Daemon:
         except ValueError as e:
             raise RpcError(-32602, str(e))
         rules.save(self.engine.rules_path)
+        self._schedule_sync()
         return rules.to_dict()
 
     def rpc_rules_set_folder(self, source: str, folder: str, **fields):
@@ -140,6 +165,7 @@ class Daemon:
         except ValueError as e:
             raise RpcError(-32602, str(e))
         rules.save(self.engine.rules_path)
+        self._schedule_sync()
         return rules.to_dict()
 
     def rpc_thumbnail_get(self, key: str):

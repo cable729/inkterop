@@ -37,6 +37,7 @@ interface Props {
   snapshot: Snapshot | null;
   onChanged: () => void;
   onConvert: (req: ConvertRequest) => void;
+  onOpenHistory: () => void;
 }
 
 /* ---------- helpers ---------- */
@@ -69,8 +70,13 @@ function docsUnder(docs: DocInfo[], path: string[]): DocInfo[] {
 function statusTitle(d: DocInfo): string {
   if (d.state === "synced") return `synced ${timeAgo(d.synced_at)}`;
   if (d.state === "pending") return "waiting for the next sync pass";
-  if (d.state === "failed") return "last sync attempt failed";
+  if (d.state === "failed")
+    return `last sync attempt failed: ${d.error ?? "unknown error"}`;
   return reasonText(d.reason);
+}
+
+function isUnsupported(d: DocInfo): boolean {
+  return d.reason === "unsupported-kind" || d.kind === "pdf" || d.kind === "epub";
 }
 
 const KIND_TITLES: Record<string, string> = {
@@ -82,32 +88,35 @@ const KIND_TITLES: Record<string, string> = {
 
 /* ---------- small components ---------- */
 
-function StatusIcon({ doc }: { doc: DocInfo }) {
-  const title = statusTitle(doc);
+function StatusIcon({
+  doc,
+  onClick,
+}: {
+  doc: DocInfo;
+  onClick?: () => void;
+}) {
+  const title = statusTitle(doc) + (onClick ? " — click for sync history" : "");
   const props = { width: 15, height: 15 };
-  if (doc.state === "synced")
-    return (
-      <span className="status-ico ico-ok" title={title}>
-        <CheckCircleIcon {...props} />
-      </span>
-    );
-  if (doc.state === "pending")
-    return (
-      <span className="status-ico ico-warn" title={title}>
-        <ClockIcon {...props} />
-      </span>
-    );
-  if (doc.state === "failed")
-    return (
-      <span className="status-ico ico-bad" title={title}>
-        <AlertIcon {...props} />
-      </span>
-    );
-  return (
-    <span className="status-ico ico-dim" title={title}>
-      <MinusCircleIcon {...props} />
+  const wrap = (cls: string, icon: ReactNode) => (
+    <span
+      className={"status-ico " + cls + (onClick ? " clickable" : "")}
+      title={title}
+      onClick={
+        onClick
+          ? (e) => {
+              e.stopPropagation();
+              onClick();
+            }
+          : undefined
+      }
+    >
+      {icon}
     </span>
   );
+  if (doc.state === "synced") return wrap("ico-ok", <CheckCircleIcon {...props} />);
+  if (doc.state === "pending") return wrap("ico-warn", <ClockIcon {...props} />);
+  if (doc.state === "failed") return wrap("ico-bad", <AlertIcon {...props} />);
+  return wrap("ico-dim", <MinusCircleIcon {...props} />);
 }
 
 function FolderStatusIcon({ docs }: { docs: DocInfo[] }) {
@@ -192,12 +201,20 @@ function DocCheckbox({
   onChanged: () => void;
 }) {
   const checked = doc.state !== "excluded";
+  const unsupported = isUnsupported(doc);
   return (
     <input
       type="checkbox"
       className="sync-check"
-      checked={checked}
-      title={checked ? "Syncing — click to exclude" : statusTitle(doc)}
+      checked={checked && !unsupported}
+      disabled={unsupported}
+      title={
+        unsupported
+          ? reasonText("unsupported-kind")
+          : checked
+            ? "Syncing — click to exclude"
+            : statusTitle(doc)
+      }
       onClick={(e) => e.stopPropagation()}
       onChange={async (e) => {
         e.stopPropagation();
@@ -224,7 +241,10 @@ function FolderCheckbox({
   onChanged: () => void;
 }) {
   const prefix = folderPath.join("/");
-  const inFolder = docsUnder(docs, folderPath);
+  const inFolder = docsUnder(docs, folderPath).filter(
+    (d) => !isUnsupported(d),
+  );
+  const empty = inFolder.length === 0;
   const checked = inFolder.some((d) => d.state !== "excluded");
   // Checking a folder whose contents are scope-excluded needs an explicit
   // allow; if it was just folder-blocked, clearing the block is enough.
@@ -240,11 +260,14 @@ function FolderCheckbox({
       type="checkbox"
       className="sync-check"
       checked={checked}
+      disabled={empty}
       title={
-        checked
-          ? "Folder syncs — click to exclude everything in it"
-          : "Excluded — click to sync this folder" +
-            (needsAllow ? " (overrides the Settings scope for it)" : "")
+        empty
+          ? "Nothing syncable here — only annotated PDFs/EPUBs (not supported yet)"
+          : checked
+            ? "Folder syncs — click to exclude everything in it"
+            : "Excluded — click to sync this folder" +
+              (needsAllow ? " (overrides the Settings scope for it)" : "")
       }
       onClick={(e) => e.stopPropagation()}
       onChange={async (e) => {
@@ -267,12 +290,14 @@ function DocDetails({
   outputDir,
   onChanged,
   onConvert,
+  onOpenHistory,
   withPreview,
 }: {
   doc: DocInfo;
   outputDir: string;
   onChanged: () => void;
   onConvert: (req: ConvertRequest) => void;
+  onOpenHistory: () => void;
   withPreview?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
@@ -294,7 +319,11 @@ function DocDetails({
       <div className="kv">
         <span>Status</span>
         <span>
-          <span className={`badge badge-${doc.state}`} title={statusTitle(doc)}>
+          <span
+            className={`badge badge-${doc.state} clickable`}
+            title={statusTitle(doc) + " — click for sync history"}
+            onClick={onOpenHistory}
+          >
             {doc.state}
           </span>{" "}
           {doc.state === "synced" && (
@@ -305,6 +334,17 @@ function DocDetails({
           <>
             <span>Why</span>
             <span className="muted">{reasonText(doc.reason)}</span>
+          </>
+        )}
+        {doc.state === "failed" && (
+          <>
+            <span>Error</span>
+            <span className="error-text">
+              {doc.error}{" "}
+              <button className="linkish" onClick={onOpenHistory}>
+                sync history
+              </button>
+            </span>
           </>
         )}
         <span>Kind</span>
@@ -319,10 +359,14 @@ function DocDetails({
         </span>
       </div>
 
-      <label className="row">
-        <DocCheckbox doc={doc} onChanged={onChanged} />
-        Sync this note
-      </label>
+      {isUnsupported(doc) ? (
+        <p className="hint">{reasonText("unsupported-kind")}</p>
+      ) : (
+        <label className="row">
+          <DocCheckbox doc={doc} onChanged={onChanged} />
+          Sync this note
+        </label>
+      )}
 
       <label className="field">
         Output name
@@ -411,7 +455,12 @@ function DocDetails({
 
 /* ---------- main view ---------- */
 
-export default function Library({ snapshot, onChanged, onConvert }: Props) {
+export default function Library({
+  snapshot,
+  onChanged,
+  onConvert,
+  onOpenHistory,
+}: Props) {
   const [mode, setMode] = useState<Mode>(
     () => (localStorage.getItem("libMode") as Mode) || "columns",
   );
@@ -597,7 +646,7 @@ export default function Library({ snapshot, onChanged, onConvert }: Props) {
                     </td>
                     <td className="muted">{d.folder || "(root)"}</td>
                     <td>
-                      <StatusIcon doc={d} />
+                      <StatusIcon doc={d} onClick={onOpenHistory} />
                     </td>
                     <td>{d.pages ?? "—"}</td>
                   </tr>
@@ -619,6 +668,7 @@ export default function Library({ snapshot, onChanged, onConvert }: Props) {
                 outputDir={snapshot.output_dir}
                 onChanged={onChanged}
                 onConvert={onConvert}
+                onOpenHistory={onOpenHistory}
               />
               <button className="linkish" onClick={() => setSelected(null)}>
                 Close
@@ -692,7 +742,7 @@ export default function Library({ snapshot, onChanged, onConvert }: Props) {
               className={
                 "col-item" +
                 (selected === d.key ? " active" : "") +
-                (d.state === "excluded" ? " dimmed" : "")
+                (d.state === "excluded" || isUnsupported(d) ? " dimmed" : "")
               }
               onClick={() => {
                 setSelected(d.key);
@@ -702,7 +752,7 @@ export default function Library({ snapshot, onChanged, onConvert }: Props) {
               <DocCheckbox doc={d} onChanged={onChanged} />
               <KindIcon kind={d.kind} />
               <span className="col-name">{d.name}</span>
-              <StatusIcon doc={d} />
+              <StatusIcon doc={d} onClick={onOpenHistory} />
             </div>
           ))}
         </div>,
@@ -717,6 +767,7 @@ export default function Library({ snapshot, onChanged, onConvert }: Props) {
             outputDir={snapshot.output_dir}
             onChanged={onChanged}
             onConvert={onConvert}
+            onOpenHistory={onOpenHistory}
             withPreview
           />
         </div>,
@@ -791,7 +842,7 @@ export default function Library({ snapshot, onChanged, onConvert }: Props) {
               </span>
               <span className="fmt">{d.format}</span>
               <span className="meta-right">
-                <StatusIcon doc={d} />
+                <StatusIcon doc={d} onClick={onOpenHistory} />
               </span>
             </div>
           </div>
@@ -854,7 +905,7 @@ export default function Library({ snapshot, onChanged, onConvert }: Props) {
               key={d.key}
               className={
                 (d.key === selected ? "selected " : "") +
-                (d.state === "excluded" ? "dimmed" : "")
+                (d.state === "excluded" || isUnsupported(d) ? "dimmed" : "")
               }
               onClick={() => setSelected(d.key)}
             >
@@ -868,7 +919,7 @@ export default function Library({ snapshot, onChanged, onConvert }: Props) {
                 <KindIcon kind={d.kind} /> {d.name}
               </td>
               <td>
-                <StatusIcon doc={d} />
+                <StatusIcon doc={d} onClick={onOpenHistory} />
               </td>
               <td>{d.pages ?? "—"}</td>
               <td>{d.format}</td>
@@ -896,6 +947,7 @@ export default function Library({ snapshot, onChanged, onConvert }: Props) {
               outputDir={snapshot.output_dir}
               onChanged={onChanged}
               onConvert={onConvert}
+              onOpenHistory={onOpenHistory}
             />
             <button className="linkish" onClick={() => setSelected(null)}>
               Close

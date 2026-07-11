@@ -103,15 +103,55 @@ export default function History({
                   <td>{p.seconds}s</td>
                   <td>{p.trigger === "watch" ? "auto" : p.trigger}</td>
                 </tr>
-                {expanded === i && p.failures.length > 0 && (
+                {expanded === i && (
                   <tr className="row-expand">
                     <td></td>
                     <td colSpan={7}>
-                      {p.failures.map((f, j) => (
-                        <div key={j} className="fail-line">
-                          <strong>{f.name}</strong> — {f.error}
+                      {(p.docs ?? []).map((d, j) => (
+                        <div
+                          key={j}
+                          className={
+                            "doc-line" +
+                            (d.action === "failed" ? " fail-line" : "")
+                          }
+                        >
+                          {d.action === "failed" ? (
+                            <AlertIcon
+                              width={13}
+                              height={13}
+                              className="ico-bad"
+                            />
+                          ) : (
+                            <CheckCircleIcon
+                              width={13}
+                              height={13}
+                              className="ico-ok"
+                            />
+                          )}{" "}
+                          <strong>{d.name}</strong>{" "}
+                          {d.action === "failed" ? (
+                            <span className="act-error">{d.error}</span>
+                          ) : (
+                            <span className="muted">
+                              → {(d.outputs ?? []).join(", ")}
+                            </span>
+                          )}
+                          <span className="muted"> ({d.seconds}s)</span>
                         </div>
                       ))}
+                      {(p.docs ?? []).length === 0 &&
+                        (p.failures.length > 0 ? (
+                          p.failures.map((f, j) => (
+                            <div key={j} className="fail-line">
+                              <strong>{f.name}</strong> — {f.error}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="muted">
+                            No per-file details for this pass (nothing
+                            changed, or it predates per-file logging).
+                          </div>
+                        ))}
                     </td>
                   </tr>
                 )}

@@ -94,23 +94,20 @@ export default function Settings({ onChanged }: { onChanged: () => void }) {
       </label>
 
       <h2>What to sync</h2>
-      {(
-        [
-          ["notebooks", "Notebooks"],
-          ["pdfs", "Annotated PDFs (handwriting only for now)"],
-          ["epubs", "Annotated EPUBs (handwriting only for now)"],
-        ] as const
-      ).map(([key, label]) => (
-        <label className="row" key={key}>
-          <input
-            type="checkbox"
-            checked={cfg[key]}
-            disabled={saving}
-            onChange={(e) => apply({ [key]: e.target.checked })}
-          />
-          {label}
-        </label>
-      ))}
+      <label className="row">
+        <input
+          type="checkbox"
+          checked={cfg.notebooks}
+          disabled={saving}
+          onChange={(e) => apply({ notebooks: e.target.checked })}
+        />
+        Notebooks
+      </label>
+      <p className="hint">
+        Annotated PDFs and EPUBs are not synced: without the planned
+        base-page merge only the handwriting would render. They appear
+        grayed out in the library.
+      </p>
 
       <h2>Sources</h2>
       <label className="row">
