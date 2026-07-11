@@ -6,6 +6,7 @@ color, not rasterizer edge noise.
 """
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 import pypdfium2 as pdfium
@@ -16,11 +17,17 @@ DEFAULT_SUPERSAMPLE = 2
 
 
 def page_count(path: Path | str) -> int:
-    doc = pdfium.PdfDocument(str(path))
-    try:
-        return len(doc)
-    finally:
-        doc.close()
+    with _PDFIUM_LOCK:
+        doc = pdfium.PdfDocument(str(path))
+        try:
+            return len(doc)
+        finally:
+            doc.close()
+
+
+#: PDFium itself is not thread-safe; the sync daemon rasterizes from
+#: several threads (thumbnails + png sink), so all pdfium use serializes.
+_PDFIUM_LOCK = threading.Lock()
 
 
 def pdf_pages_to_images(path: Path | str, dpi: int = DEFAULT_DPI,
@@ -30,6 +37,11 @@ def pdf_pages_to_images(path: Path | str, dpi: int = DEFAULT_DPI,
 
     `pages` selects 0-based page indices (default: all).
     """
+    with _PDFIUM_LOCK:
+        return _pdf_pages_to_images(path, dpi, supersample, pages)
+
+
+def _pdf_pages_to_images(path, dpi, supersample, pages):
     doc = pdfium.PdfDocument(str(path))
     try:
         indices = pages if pages is not None else range(len(doc))

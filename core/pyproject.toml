@@ -16,6 +16,7 @@ dependencies = [
     "pillow>=10",
     "pypdfium2>=4.30",
     "numpy>=1.26",
+    "tomlkit>=0.15.0",
 ]
 
 [project.scripts]
@@ -32,6 +33,9 @@ dev = [
 docs = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.26",
+]
+packaging = [
+    "pyinstaller>=6.21.0",
 ]
 
 [build-system]

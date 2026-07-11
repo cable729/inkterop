@@ -1,10 +1,14 @@
 name: docs
 
+# One Pages deployment: the marketing site (website/) at the root and the
+# mkdocs documentation under /docs/.
+
 on:
   push:
     branches: [main]
     paths:
       - "docs/**"
+      - "website/**"
       - "mkdocs.yml"
       - "core/src/**"
       - "core/pyproject.toml"
@@ -28,7 +32,13 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv run --project core --group docs mkdocs build --strict
+      - run: uv run --project core --group docs mkdocs build --strict --site-dir site-docs
+      - name: Assemble site (landing at /, docs under /docs/)
+        run: |
+          mkdir -p site
+          cp -R website/. site/
+          mkdir -p site/docs
+          cp -R site-docs/. site/docs/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

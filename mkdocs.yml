@@ -2,7 +2,7 @@ site_name: inkterop
 site_description: >-
   Universal converter between handwritten-note formats — reMarkable,
   GoodNotes, Notability, Supernote, Saber, Xournal++, InkML, SVG, PDF
-site_url: https://cable729.github.io/inkterop/
+site_url: https://cable729.github.io/inkterop/docs/
 repo_url: https://github.com/cable729/inkterop
 repo_name: cable729/inkterop
 edit_uri: edit/main/docs/

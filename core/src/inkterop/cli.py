@@ -15,9 +15,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", type=Path, help="config file path")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("mirror", help="one incremental mirror pass")
+    sub.add_parser("mirror", help="one incremental mirror pass "
+                                  "(reMarkable source only)")
     w = sub.add_parser("watch", help="watch the cache and mirror continuously")
     w.add_argument("--debounce", type=float, default=30.0)
+    sub.add_parser("sync", help="one incremental pass over ALL configured "
+                                "sources (see [sources] in config.toml)")
+    d = sub.add_parser("daemon", help="stdio JSON-RPC daemon for GUI shells")
+    d.add_argument("--no-watch", action="store_true",
+                   help="serve RPCs only; don't watch sources for changes")
+    d.add_argument("--debounce", type=float, default=30.0)
     r = sub.add_parser("render", help="render one document to PDF")
     r.add_argument("name", help="document name or uuid")
     r.add_argument("out", type=Path, nargs="?", help="output PDF path")
@@ -77,6 +84,19 @@ def main(argv: list[str] | None = None) -> int:
         from .mirror import watch
         watch(cfg, args.cache_dir, args.debounce)
         return 0
+
+    if args.cmd == "sync":
+        from .sync import sync_once
+        s = sync_once(cfg)
+        print(f"synced {s['rendered']}, unchanged {s['skipped']}, "
+              f"failed {s['failed']}, removed {s['removed']} "
+              f"({s['seconds']}s, {s['documents']} docs)")
+        return 1 if s["failed"] else 0
+
+    if args.cmd == "daemon":
+        from .sync.daemon import main as daemon_main
+        return daemon_main(cfg, watch=not args.no_watch,
+                           debounce=args.debounce)
 
     if args.cmd == "convert":
         from .convert import ConvertError, convert

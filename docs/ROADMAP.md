@@ -104,13 +104,27 @@ Still open in M2 scope:
   variable-width strokes) and **annotated-PDF base-page merge** —
   carried over, unchanged.
 
-## Phase 2 — macOS menu-bar app  ◻ NOT STARTED
-SwiftUI `MenuBarExtra` shell that supervises a bundled `inkterop watch`
-(PyInstaller binary), shows `~/.config/inkterop/status.json`, Settings
-window editing the TOML, `SMAppService` login item. Keep ALL logic in
-`core/` — Windows/Linux tray shells reuse the same core + status protocol.
-(Windows: desktop app has an equivalent cache; Linux: no desktop app, use
-rmapi read-only pull as the library source.)
+## Phase 2 — desktop app (sync control center + converter GUI)  ✅ DONE (2026-07-10)
+Shipped bigger than planned: a full Tauri 2 app (`app/`) instead of a
+menu-bar-only shell — one codebase gives the main window AND the tray item,
+and Windows/Linux builds fall out of the same code. ALL logic stays in
+`core/`: the app spawns `inkterop daemon` (stdio JSON-RPC sidecar;
+PyInstaller-frozen in release bundles, live uv tree in dev).
+
+- **Core sync module** (`core/src/inkterop/sync/`): multi-source
+  (reMarkable cache, note-file folders, experimental GoodNotes/Notability
+  container scanners), multi-sink (pdf/svg/png/inkz), per-doc rules
+  (allow/block, rename, destination, format) in rules.toml, v2 state with
+  v1 migration, watcher pid-lock. `mirror`/`watch` unchanged for launchd.
+- **App**: library browser (Finder-style columns / thumbnail grid /
+  details list, first-page previews, folder+note sync toggles, output
+  overrides), drag-and-drop converter over the full registry, activity
+  log, settings, tray with sync controls, legacy-launchd migration.
+- **Releases**: `.github/workflows/release.yml` — macOS signed+notarized
+  (once Apple secrets land — see `app/RELEASING.md`), Windows/Linux
+  community builds; Homebrew cask recipe documented.
+- **Website**: `website/` landing page at the Pages root, docs moved
+  under `/docs/`.
 
 ## Phase 3 — Import lane + iPad trial  ◻ NOT STARTED
 - `inkterop send <pdf> [--folder X]` via ddvk/rmapi (`mkdir`+`put`),
