@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Inkterop — sync &amp; convert handwritten notes</title>
+  <meta name="description"
+        content="A universal converter and sync engine for handwritten notes: reMarkable, GoodNotes, Notability, Supernote, Saber, OneNote, Apple Notes ink and more — to PDF, SVG, PNG and editable ink formats." />
+  <meta property="og:title" content="Inkterop" />
+  <meta property="og:description"
+        content="Sync and convert handwritten notes between e-ink devices, note apps and display formats." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✒️</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="hero">
+  <nav>
+    <span class="logo">✒️ Inkterop</span>
+    <div class="nav-links">
+      <a href="#download">Download</a>
+      <a href="#formats">Formats</a>
+      <a href="docs/">Docs</a>
+      <a href="https://github.com/cable729/inkterop">GitHub</a>
+    </div>
+  </nav>
+
+  <div class="hero-body">
+    <h1>Your handwriting, everywhere.</h1>
+    <p class="tagline">
+      Inkterop reads the actual pen strokes out of reMarkable, GoodNotes,
+      Notability, Supernote, Saber, OneNote and a dozen other formats —
+      and writes them back out as PDF, SVG, PNG, or editable ink.
+      Automatically, in the background, into folders you control.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#download" id="cta-download">Download for macOS</a>
+      <a class="btn" href="docs/">Read the docs</a>
+    </div>
+    <p class="fineprint">Free &amp; open source (MIT). Windows and Linux community builds available.</p>
+  </div>
+
+  <img class="shot" src="screenshot.png"
+       alt="Inkterop's library browser showing handwritten note previews"
+       onerror="this.style.display='none'" />
+</header>
+
+<main>
+  <section class="features">
+    <div class="feature">
+      <h3>📚 A real library browser</h3>
+      <p>Browse every notebook with first-page previews — Finder-style
+      columns, a thumbnail grid, or a details list. Choose exactly which
+      notes and folders sync, rename outputs, pick a format per note.</p>
+    </div>
+    <div class="feature">
+      <h3>🔁 Hands-off sync</h3>
+      <p>The engine watches your device's library and mirrors changed
+      notes into normal PDFs (or SVG/PNG) within a minute or two —
+      into iCloud Drive, Dropbox, a git repo, wherever you point it.
+      Your source library is never written to. Ever.</p>
+    </div>
+    <div class="feature">
+      <h3>🪄 Drag-and-drop conversion</h3>
+      <p>Drop a <code>.goodnotes</code>, <code>.ntb</code>, <code>.sba</code>
+      or 15 other note formats on the app and get editable ink out —
+      not a flattened picture. Per-point pressure, tilt and pen widths
+      survive the trip where the target format can hold them.</p>
+    </div>
+    <div class="feature">
+      <h3>🔬 Reverse-engineered carefully</h3>
+      <p>Every format claim is validated against the app's own exports and
+      documented with confidence markers —
+      <a href="docs/">the format specs are public</a>. Fidelity is pinned
+      by golden tests, measured in pixels, not vibes.</p>
+    </div>
+  </section>
+
+  <section id="download" class="download">
+    <h2>Download</h2>
+    <div class="dl-buttons" id="dl-buttons">
+      <a class="btn primary" id="dl-mac"
+         href="https://github.com/cable729/inkterop/releases/latest">macOS (Apple silicon)</a>
+      <a class="btn" id="dl-win"
+         href="https://github.com/cable729/inkterop/releases/latest">Windows</a>
+      <a class="btn" id="dl-linux"
+         href="https://github.com/cable729/inkterop/releases/latest">Linux</a>
+    </div>
+    <p class="dl-note" id="dl-note">Or grab any release from
+      <a href="https://github.com/cable729/inkterop/releases">GitHub Releases</a>.</p>
+    <div class="brew">
+      <p>Homebrew:</p>
+      <pre><code>brew install cable729/tap/inkterop</code></pre>
+    </div>
+    <p class="fineprint">The CLI and Python engine install separately:
+      <code>uv tool install inkterop</code> — see the
+      <a href="docs/">documentation</a>.</p>
+  </section>
+
+  <section id="formats" class="formats">
+    <h2>Format support</h2>
+    <table>
+      <thead><tr><th>Format</th><th>Read</th><th>Write</th></tr></thead>
+      <tbody>
+        <tr><td>reMarkable v6 (Paper Pro)</td><td>✓</td><td>experimental</td></tr>
+        <tr><td>GoodNotes 6</td><td>✓</td><td>experimental</td></tr>
+        <tr><td>Notability (.ntb + legacy .note)</td><td>✓</td><td>experimental</td></tr>
+        <tr><td>Supernote .note</td><td>raster</td><td>experimental</td></tr>
+        <tr><td>Saber</td><td>✓</td><td>experimental</td></tr>
+        <tr><td>Nebo / MyScript</td><td>✓</td><td>—</td></tr>
+        <tr><td>OneNote .one</td><td>✓</td><td>—</td></tr>
+        <tr><td>Apple PencilKit (.pkdrawing)</td><td>✓</td><td>—</td></tr>
+        <tr><td>Samsung Notes (.sdocx)</td><td>✓</td><td>—</td></tr>
+        <tr><td>Onyx Boox .note</td><td>✓</td><td>—</td></tr>
+        <tr><td>Wacom UIM, MS-ISF, InkML</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Xournal++, Excalidraw, tldraw, SVG</td><td>✓</td><td>✓ (tldraw read-only)</td></tr>
+        <tr><td>PDF / SVG / PNG output</td><td>SVG two-way</td><td>✓</td></tr>
+      </tbody>
+    </table>
+    <p class="fineprint">"experimental" writers produce valid files but are
+    still being validated against each app's importer — the app marks them
+    clearly. Full matrix and per-format specs in the
+    <a href="docs/">docs</a>.</p>
+  </section>
+</main>
+
+<footer>
+  <p>MIT licensed. Format documentation CC&nbsp;BY&nbsp;4.0.
+     Built by <a href="https://github.com/cable729">cable729</a>.
+     Not affiliated with reMarkable, GoodNotes, Notability, or any note app
+     vendor.</p>
+</footer>
+
+<script>
+  // Point the download buttons at the latest release's actual assets.
+  fetch("https://api.github.com/repos/cable729/inkterop/releases/latest")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((rel) => {
+      if (!rel || !rel.assets) return;
+      const find = (re) => rel.assets.find((a) => re.test(a.name));
+      const set = (id, asset, label) => {
+        const el = document.getElementById(id);
+        if (el && asset) {
+          el.href = asset.browser_download_url;
+          if (label) el.textContent = label;
+        }
+      };
+      const v = rel.tag_name ? ` ${rel.tag_name}` : "";
+      set("dl-mac", find(/\.dmg$/), `macOS${v} (Apple silicon)`);
+      set("cta-download", find(/\.dmg$/), null);
+      set("dl-win", find(/\.(msi|exe)$/), `Windows${v}`);
+      set("dl-linux", find(/\.(AppImage|deb)$/), `Linux${v}`);
+    })
+    .catch(() => {});
+</script>
+</body>
+</html>

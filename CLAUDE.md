@@ -17,14 +17,23 @@ the ecosystem survey.
     supernote (r, raster-first), notability (r, legacy format).
   - `render/` — pdf.py (reportlab; quirk-exact port of the validated
     renderer), svg.py (filled-outline tessellation), primitives.py.
-  - `convert.py`, `library.py`, `mirror.py`, `config.py`, `cli.py`.
+  - `sync/` — multi-source/multi-sink engine: rules.py (per-doc
+    allow/block + output overrides), sources.py (reMarkable cache,
+    note-file folders, experimental app containers), sinks.py
+    (pdf/svg/png/inkz), engine.py, daemon.py (stdio JSON-RPC for the app).
+  - `convert.py`, `library.py`, `mirror.py` (thin wrapper over sync/),
+    `config.py`, `cli.py`; `packaging/` — PyInstaller sidecar for the app.
+- `app/` — Tauri 2 desktop app (React+TS webview, Rust shell). Spawns the
+  core daemon as a sidecar (dev: via uv; release: PyInstaller binary).
+  Main window (library browser / convert / activity / settings) + tray.
+- `website/` — static landing page, deployed to the Pages root; mkdocs
+  docs live under /docs/ (`.github/workflows/docs.yml` assembles both).
 - `tools/re/` — reverse-engineering toolkit (pbwire, applelz4, inventory).
 - `corpus/` — GITIGNORED. third-party/ = downloaded study samples (never
   redistribute, never vendor into tests). Self-made fixtures go to
   `core/tests/fixtures/<format>/` instead.
-- `device-mods/` — XOVI/qmd kit + warranty rollback. Time-sensitive:
-  ROADMAP Phase 0 (device leaves for repair ~2026-07-12).
-- `macos/` — (not started) SwiftUI menu-bar shell around `inkterop watch`.
+- `device-mods/` — XOVI/qmd kit + warranty rollback (Phase 0 done; keep
+  for the repair-return reinstall).
 - `docs/` — roadmap, IR spec, per-format specs (with
   [verified]/[inferred]/[unknown] confidence markers), RE methodology,
   corpus protocol, validated-writes policy.
@@ -37,12 +46,19 @@ uv run pytest -q                    # full suite incl. golden fidelity tests
 uv run pytest --update-goldens      # ONLY after an intentional render change
 uv run inkterop ls                 # list the real library
 uv run inkterop render "Name"      # render one doc to PDF
-uv run inkterop mirror             # incremental mirror pass
+uv run inkterop mirror             # incremental mirror pass (rM only)
+uv run inkterop sync               # pass over ALL configured sources
+uv run inkterop daemon             # stdio JSON-RPC engine (the app's sidecar)
 uv run inkterop convert IN OUT [--fidelity exact|native|raw]
 uv run inkterop inspect IN [--json]   # parsed-content summary (RE workhorse)
 uv run python scripts/ab_check.py snapshot|compare  # whole-library A/B
 ./launchd/install.sh                # (re)install the watch daemon
 python3 ../tools/re/inventory.py f.goodnotes  # first look at unknown files
+
+cd ../app
+npm run tauri dev                   # desktop app against the live core (uv)
+npm run tauri build                 # release bundle; sidecar must exist:
+../core/packaging/build-sidecar.sh  #   freeze the engine for this host
 ```
 
 ## Hard-won facts (do not rediscover)
@@ -84,15 +100,21 @@ python3 ../tools/re/inventory.py f.goodnotes  # first look at unknown files
 
 ## State that lives outside the repo
 
-- Mirror output: `iCloud Drive/reMarkable/` (+ `.inkterop-state.json`).
-- Config: `~/.config/inkterop/config.toml`; status for UI shells:
-  `~/.config/inkterop/status.json`; daemon log: `~/.config/inkterop/watch.log`.
-- launchd agent: `com.inkterop.watch` (`launchctl list | grep inkterop`).
+- Mirror output: `iCloud Drive/reMarkable/` (+ `.inkterop-state.json`,
+  now schema v2: per-doc output lists).
+- Config: `~/.config/inkterop/config.toml`; sync rules (app-managed):
+  `~/.config/inkterop/rules.toml`; status for UI shells:
+  `~/.config/inkterop/status.json`; watcher lock: `watch.lock`; thumbnail
+  cache: `~/.cache/inkterop/thumbs/`.
+- launchd agent: `com.inkterop.watch` (`launchctl list | grep inkterop`) —
+  legacy; the desktop app watches instead when running and offers to
+  disable it (both at once is prevented by the watch lock).
 
 ## Style
 
-Python 3.12, uv, no heavy deps (rmscene/reportlab/pikepdf/watchdog/
-supernotelib). Licensing: code MIT, docs CC BY 4.0, self-made fixtures CC0.
+Python 3.12, uv. Dependencies: use good ones freely when they pull their
+weight (per maintainer, 2026-07-10 — the old "no heavy deps" rule is
+rescinded). Licensing: code MIT, docs CC BY 4.0, self-made fixtures CC0.
 Prefer empirical validation against official exports over trusting
 community-tool formulas — that approach found every fidelity bug so far.
 Format claims in docs carry [verified]/[inferred]/[unknown] markers.

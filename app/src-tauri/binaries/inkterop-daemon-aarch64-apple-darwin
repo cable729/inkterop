@@ -1,4 +1,0 @@
-#!/bin/sh
-# Dev placeholder for the bundled PyInstaller daemon (see core/packaging).
-# Release builds replace this file with the real binary before `tauri build`.
-exec uv run --project "$(dirname "$0")/../../../core" inkterop "$@"

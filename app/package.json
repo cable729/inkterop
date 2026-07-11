@@ -1,11 +1,11 @@
 {
-  "name": "app",
+  "name": "inkterop-app",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "node scripts/ensure-sidecar.mjs && vite",
+    "build": "node scripts/ensure-sidecar.mjs && tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"
   },

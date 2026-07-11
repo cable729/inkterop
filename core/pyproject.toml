@@ -34,6 +34,9 @@ docs = [
     "mkdocs-material>=9.5",
     "mkdocstrings[python]>=0.26",
 ]
+packaging = [
+    "pyinstaller>=6.21.0",
+]
 
 [build-system]
 requires = ["hatchling"]

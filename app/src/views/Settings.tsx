@@ -4,6 +4,38 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { api, SINK_FORMATS, type AppConfig } from "../rpc";
 
+function LegacyDaemon() {
+  const [loaded, setLoaded] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    invoke<boolean>("legacy_daemon_loaded").then(setLoaded).catch(() => {});
+  }, []);
+  if (!loaded) return null;
+  return (
+    <>
+      <h2>Background daemon</h2>
+      <p className="hint">
+        The old command-line watch daemon (launchd:{" "}
+        <code>com.inkterop.watch</code>) is still running. The app now does
+        the watching — running both would sync twice.
+      </p>
+      <button
+        onClick={async () => {
+          try {
+            await invoke("disable_legacy_daemon");
+            setLoaded(false);
+          } catch (e) {
+            setError(String(e));
+          }
+        }}
+      >
+        Disable the old daemon
+      </button>
+      {error && <p className="hint">Failed: {error}</p>}
+    </>
+  );
+}
+
 export default function Settings({ onChanged }: { onChanged: () => void }) {
   const [cfg, setCfg] = useState<AppConfig | null>(null);
   const [autostart, setAutostart] = useState(false);
@@ -170,6 +202,8 @@ export default function Settings({ onChanged }: { onChanged: () => void }) {
           <option value="rmc">rmc — community-renderer look</option>
         </select>
       </label>
+
+      <LegacyDaemon />
 
       <h2>App</h2>
       <label className="row">

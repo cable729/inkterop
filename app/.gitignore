@@ -22,3 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# real sidecar binaries are built by core/packaging/build-sidecar.sh
+src-tauri/binaries/

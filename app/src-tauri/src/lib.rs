@@ -16,6 +16,52 @@ fn set_close_to_tray(enabled: bool) {
     CLOSE_TO_TRAY.store(enabled, Ordering::SeqCst);
 }
 
+/// Is the legacy `com.inkterop.watch` launchd agent (pre-app CLI daemon)
+/// still loaded? The app owns watching now; both running would race.
+#[tauri::command]
+fn legacy_daemon_loaded() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("launchctl")
+            .args(["list", "com.inkterop.watch"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+}
+
+#[tauri::command]
+fn disable_legacy_daemon() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let uid = unsafe { libc_getuid() };
+        let out = std::process::Command::new("launchctl")
+            .args(["bootout", &format!("gui/{uid}/com.inkterop.watch")])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr).into_owned());
+        }
+        // Also remove the agent plist so it doesn't return at login.
+        if let Some(home) = std::env::var_os("HOME") {
+            let plist = std::path::Path::new(&home)
+                .join("Library/LaunchAgents/com.inkterop.watch.plist");
+            let _ = std::fs::remove_file(plist);
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err("only applicable on macOS".into())
+}
+
+#[cfg(target_os = "macos")]
+extern "C" {
+    #[link_name = "getuid"]
+    fn libc_getuid() -> u32;
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         #[cfg(target_os = "macos")]
@@ -97,7 +143,9 @@ pub fn run() {
         .manage(DaemonManager::new())
         .invoke_handler(tauri::generate_handler![
             daemon::rpc,
-            set_close_to_tray
+            set_close_to_tray,
+            legacy_daemon_loaded,
+            disable_legacy_daemon
         ])
         .setup(|app| {
             let handle = app.handle().clone();
