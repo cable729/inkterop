@@ -228,3 +228,99 @@ def test_writer_experimental_gate(tmp_path):
         convert(FIXTURE, out)
     convert(FIXTURE, out, experimental=True)
     assert out.exists()
+
+
+def _image_doc():
+    from io import BytesIO
+    from PIL import Image
+    buf = BytesIO()
+    Image.new("RGB", (8, 4), "blue").save(buf, "PNG")
+    doc = _synthetic_doc()
+    doc.pages[1].bounds = ir.Rect(-10, 842, 585, 1684)
+    raster = ir.RasterImage(buf.getvalue(), "png", ir.Rect(20, 870, 100, 910))
+    doc.pages[1].layers.insert(0, ir.Layer(raster=raster))
+    # Identical pixels, separate movable objects: one archive asset, two IDs.
+    doc.pages[0].layers.insert(0, ir.Layer(raster=ir.RasterImage(
+        buf.getvalue(), "png", ir.Rect(10, 20, 90, 60))))
+    return doc
+
+
+@pytest.mark.parametrize("suffix", [".sba", ".sbn2"])
+def test_images_are_portable_and_have_saber_schema(tmp_path, suffix):
+    import zipfile
+    src = _image_doc()
+    out = tmp_path / ("images" + suffix)
+    SaberWriter().write(src, out, Fidelity.EXACT)
+    if suffix == ".sba":
+        with zipfile.ZipFile(out) as z:
+            assert z.namelist() == ["main.sbn2", "main.sbn2.0"]
+            assert z.read("main.sbn2.0") == src.pages[0].layers[0].raster.data
+            raw, _ = parse_bson(z.read("main.sbn2"))
+            assert "a" not in raw
+    else:
+        raw, _ = parse_bson(out.read_bytes())
+        assert raw["a"] == [src.pages[0].layers[0].raster.data]
+    assert raw["ni"] == 2
+    first, second = [p["i"][0] for p in raw["z"]]
+    assert (first["id"], second["id"]) == (0, 1)
+    assert (first["a"], second["a"]) == (0, 0)
+    assert (first["i"], second["i"]) == (0, 1)
+    assert second["e"] == ".png"
+    assert (second["nw"], second["nh"], second["sw"], second["sh"]) == (8, 4, 8, 4)
+    assert second["v"] is False  # don't invert colored images in dark mode
+    k = 1000 / 595
+    assert second["x"] == pytest.approx(30 * k)
+    assert second["y"] == pytest.approx(28 * k)
+    back = SaberReader().read(out)
+    assert len(back.pages) == 2
+    image = back.pages[1].layers[0].raster
+    assert image.data == src.pages[1].layers[0].raster.data
+    assert image.bounds.width == pytest.approx(80 * k)
+    assert image.bounds.height == pytest.approx(40 * k)
+
+
+def test_saber_background_image(tmp_path):
+    src = _image_doc()
+    raster = src.pages[0].layers.pop(0).raster
+    src.pages[0].background = ir.ImageBackground(raster)
+    out = tmp_path / "background.sba"
+    SaberWriter().write(src, out, Fidelity.EXACT)
+    back = SaberReader().read(out)
+    assert isinstance(back.pages[0].background, ir.ImageBackground)
+    assert back.pages[0].background.image.data == raster.data
+
+
+def test_missing_image_asset_errors(tmp_path):
+    import zipfile
+    from inkterop.formats.saber.writer import document_to_sbn2
+    assets = []
+    data = document_to_sbn2(_image_doc(), assets=assets)
+    out = tmp_path / "missing.sba"
+    with zipfile.ZipFile(out, "w") as z:
+        z.writestr("main.sbn2", data)
+    with pytest.raises(ValueError, match="missing Saber image asset"):
+        SaberReader().read(out)
+
+
+def test_notability_to_saber_pages_selection_and_images(tmp_path):
+    import zipfile
+    from test_notability import native_session, image_object, tiny_png
+    from inkterop.convert import convert
+    note = tmp_path / "two.note"
+    curves = [([20, 30], [760, 780], 3, (255, 0, 0, 255))]
+    with zipfile.ZipFile(note, "w") as z:
+        z.writestr("Note/Session.plist", native_session(curves, media=[
+            image_object(origin="{10, 800}")]))
+        z.writestr("Note/Images/picture.png", tiny_png())
+    out = tmp_path / "second.sba"
+    convert(note, out, pages="2", experimental=True)
+    back = SaberReader().read(out)
+    assert len(back.pages) == 1
+    assert back.pages[0].layers[0].raster.data == tiny_png()
+    stroke = list(back.pages[0].strokes())[0]
+    assert stroke.y[0] == pytest.approx((760 - 744.1875) / .595, abs=1e-4)
+    assert stroke.color == ir.Color(1, 0, 0)
+    with zipfile.ZipFile(out) as z:
+        raw, _ = parse_bson(z.read("main.sbn2"))
+    assert raw["z"][0]["i"][0]["i"] == 0
+    assert raw["z"][0]["s"][0]["i"] == 0

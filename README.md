@@ -32,8 +32,8 @@ uv run inkterop inspect mystery.note                 # what's inside?
 | reMarkable v6 (`.rm`, Paper Pro) | ✓ | — (M2) | reference implementation; output validated ~2% against official exports |
 | GoodNotes 6 (`.goodnotes`) | ink+color | — | reverse-engineered here — [docs/formats/goodnotes.md](docs/formats/goodnotes.md) |
 | Notability modern (`.ntb`) | ✓ | — | FlatBuffers format reverse-engineered here |
-| Notability legacy (`.note`) | ✓ | — | 2018 zip format, verified alive |
-| Saber (`.sba`/`.sbn2`) | ✓ | — | open BSON format; raw pressure preserved |
+| Notability legacy (`.note`) | ✓ | — | native pages, editable ink, positioned images |
+| Saber (`.sba`/`.sbn2`) | ✓ | experimental | pages, ink, text and image assets; raw pressure preserved |
 | Supernote (`.note`) | raster | — | via supernotelib; vector ink is an open RE target |
 | Xournal++ (`.xopp`) | ✓ | **✓** | app-open validated (Xournal++ 1.3.5) |
 | Nebo/MyScript (`.nebo`) | container | — | BINK ink codec under active RE |
@@ -45,6 +45,25 @@ uv run inkterop inspect mystery.note                 # what's inside?
 Three fidelity modes per conversion: `exact` (the source app's look),
 `native` (the target restyles semantically), `raw` (per-point pen
 dynamics). See [docs/ir.md](docs/ir.md).
+
+### Notability to Saber
+
+```sh
+cd core
+uv run inkterop convert lecture.note lecture.sba --experimental
+```
+
+Legacy `.note` files now use their stored canvas width and native paper
+geometry to produce separate pages. Embedded pictures retain their position,
+size and pixels; `.sba` packages them as Saber image objects. Crossing ink
+is split at page boundaries with its colors and widths retained.
+
+Use `.sba` for import into Saber. `.sbn2` also supports self-contained
+inline images. The writer remains experimental until the new page/image
+path has been checked in the target app. PDF-backed Notability layouts,
+typed text and modern `.ntb` page/image decoding are not covered by this
+legacy-reader change. Details: [Notability](docs/formats/notability.md)
+and [Saber](docs/formats/saber.md).
 
 ## Repo layout
 

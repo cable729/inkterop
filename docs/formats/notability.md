@@ -62,13 +62,66 @@ somewhere not yet identified. Until resolved, our reader renders strokes
 at their constant `curveswidth` (which matches how several community
 tools render Notability ink) and preserves the raw blob for research.
 
-## Coordinates `[inferred]`
+## Native pages and images (2026-10-10)
 
-Float32 points, y down. Values are consistent with PDF points; Notability
-documents are a continuous vertical scroll rather than fixed pages, so our
-reader emits a single page sized to the ink extents (US-Letter width
-floor). Page/paper settings likely live elsewhere in the session object —
-not yet mapped.
+Ink is float32, y down, on a continuous document canvas. Pages tile that
+canvas; it must not be treated as a single long page.
+
+`[verified fields; native Letter geometry checked against source thumbnails]`
+
+- `richText.reflowState.pageWidthInDocumentCoordsKey` supplies canvas width
+  `C`. `documentPaperAttributes.paperSizingBehavior = lockedWidth:...`
+  supplies the fallback. Very old notes use `C=768` when neither exists.
+- The paper model is rooted at
+  `NBNoteTakingSessionDocumentPaperLayoutModelKey`. Native Letter has
+  aspect **612 / 803.25**, rather than ordinary Letter's 612 / 792. A4
+  uses 595.28 / 841.89; landscape swaps the dimensions.
+- `documentHeight = C * paperHeight / paperWidth`. For a stored width
+  of 567, Letter pages are **744.1875** document units high. This matches
+  the embedded 576 x 756 native-page thumbnails and an observed image
+  anchored exactly at the start of the third page (y=1488.375).
+- A fixed horizontal inset of `15 / 576 * C` matches the source preview
+  (first-page ink sample overlap >98% within a one-pixel tolerance).
+  This offset is **empirically inferred**, rather than a stored field;
+  it is not independently app-export-validated for every paper/orientation.
+- Nonempty `pageLayoutArray` native page numbers preserve trailing blank
+  pages. They can be stale/short, so content can extend their page count.
+  When empty, count comes from ink and **image** extents.
+
+The coordinate derivation also agrees with the independent format notes
+[NATIVE_PAGES.md](https://github.com/lh/notability-to-pdf/blob/909da21d9d041860646312d3ee0ba696531b4318/docs/NATIVE_PAGES.md).
+Its PDF-export offsets are not used as thumbnail offsets. This is an
+independent implementation of format facts, not a port of another reader.
+
+`legacy_layout.py` keeps page bounds in source coordinates. It splits
+strokes crossing a page edge and interpolates per-point channels at the
+intersection. Writers rebase each page locally. Bare Session.plist
+samples with no `richText` retain the old continuous-canvas fallback.
+
+`[verified against referenced assets and source previews]` Each active
+`richText.mediaObjects` image contains:
+
+| Field | Meaning |
+|---|---|
+| `documentContentOrigin` / `documentOrigin` | position on the continuous canvas |
+| `unscaledContentSize` | displayed width and height |
+| `figure.FigureCropRectKey` | source-pixel crop rectangle |
+| `figure.FigureBackgroundObjectKey.kImageObjectSnapshotKey.relativePath` | asset ZIP member relative to the note folder |
+| `isFlippedHorizontal`, `isFlippedVertical` | mirror flags |
+| `rotationDegrees` | clockwise rotation, treated as degrees |
+| `zIndex` | ordering among images |
+
+Unmodified PNG/JPEG assets are preserved byte-for-byte. Crop, mirror and
+rotation are baked into image pixels, while ink remains editable. Images
+crossing pages are cropped into page-local pieces. Nonzero rotations are
+synthetically tested; archives with radians stored under `rotationDegrees`
+are not disambiguated. Image/ink interleaving is approximated by images
+below ink. Unreferenced/deleted assets are not imported. Missing referenced
+assets and unsupported PDF-backed page layouts fail explicitly.
+
+Regression fixtures are synthetic; private input notes are not included.
+Tests cover blank pages, page selection, boundary strokes, cropped images,
+missing assets and both modern and numbered keyed-archive containers.
 
 ## Cloud-era storage
 
@@ -248,8 +301,8 @@ app-import fails, a legacy plist writer is the fallback lane.
 ## Legacy reader
 
 `core/src/inkterop/formats/notability/reader.py` — strokes, colors,
-per-stroke widths, highlighter inference from alpha. PDF backgrounds,
-text, audio not yet mapped.
+per-stroke widths, highlighter inference from alpha, native pages and
+embedded images. PDF backgrounds, text and audio are not yet mapped.
 
 ## Open questions
 
@@ -257,7 +310,7 @@ Legacy `.note`:
 
 1. `curvesfractionalwidths` → stroke mapping (pressure profile!). Corpus
    case 16 (pressure ramp) is designed to crack this.
-2. Page/paper metadata location; PDF-background ↔ ink alignment.
+2. PDF-background ↔ ink alignment, mixed page sizes, additional paper types.
 3. `eventTokens`, `InkedSpatialHash` internals (probably derived data).
 
 Modern `.ntb`:

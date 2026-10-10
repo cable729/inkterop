@@ -26,9 +26,14 @@ public BSON spec, bsonspec.org).
 from __future__ import annotations
 
 import logging
+import base64
 import struct
 import zipfile
+from collections.abc import Callable
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 from ... import ir
 
@@ -155,7 +160,44 @@ def _stroke(s: dict) -> ir.Stroke | None:
     )
 
 
-def read_sbn2(data: bytes, title: str = "") -> ir.Document:
+def _image(raw: dict, inline_assets: list | None,
+           load_asset: Callable[[int], bytes] | None) -> ir.RasterImage:
+    if "a" in raw:
+        index = raw["a"]
+        if not isinstance(index, int) or index < 0:
+            raise ValueError("invalid Saber image asset index")
+        if inline_assets is not None:
+            if index >= len(inline_assets):
+                raise ValueError(f"missing Saber image asset {index}")
+            data = inline_assets[index]
+        elif load_asset is not None:
+            data = load_asset(index)
+        else:
+            raise ValueError(f"missing Saber image asset {index}")
+    elif "b" in raw:
+        data = raw["b"]
+    else:
+        raise ValueError("Saber image has no asset")
+    if isinstance(data, str):
+        data = base64.b64decode(data, validate=True)
+    else:
+        data = bytes(data)
+    with Image.open(BytesIO(data)) as image:
+        fmt = (image.format or "PNG").lower()
+        sx, sy = raw.get("sx", 0), raw.get("sy", 0)
+        sw, sh = raw.get("sw") or image.width, raw.get("sh") or image.height
+        if (sx, sy, sw, sh) != (0, 0, *image.size):
+            crop = image.crop((sx, sy, sx + sw, sy + sh))
+            buf = BytesIO()
+            crop.save(buf, format="PNG")
+            data, fmt = buf.getvalue(), "png"
+    x, y = float(raw.get("x", 0)), float(raw.get("y", 0))
+    w, h = float(raw.get("w", 0)), float(raw.get("h", 0))
+    return ir.RasterImage(data, fmt, ir.Rect(x, y, x + w, y + h))
+
+
+def read_sbn2(data: bytes, title: str = "",
+              load_asset: Callable[[int], bytes] | None = None) -> ir.Document:
     doc, _ = parse_bson(data)
     pages = []
     for page in doc.get("z") or []:
@@ -168,13 +210,18 @@ def read_sbn2(data: bytes, title: str = "") -> ir.Document:
         for q in page.get("q") or []:
             if isinstance(q, dict) and isinstance(q.get("insert"), str):
                 texts.append(ir.TextBlock(x=0.0, y=0.0, text=q["insert"]))
+        image_layers = [ir.Layer(raster=_image(raw, doc.get("a"), load_asset))
+                        for raw in page.get("i") or []]
+        background = (ir.ImageBackground(_image(page["b"], doc.get("a"), load_asset))
+                      if page.get("b") else None)
         pages.append(ir.Page(
             bounds=ir.Rect(0.0, 0.0,
                            float(page.get("w", 1000.0)),
                            float(page.get("h", 1400.0))),
             # Saber canvas units; ~A5-ish page. 1000u -> 595pt [inferred].
             point_scale=595.0 / 1000.0,
-            layers=[ir.Layer(strokes=strokes, texts=texts)],
+            layers=[*image_layers, ir.Layer(strokes=strokes, texts=texts)],
+            background=background,
         ))
     return ir.Document(
         format_id=FORMAT_ID,
@@ -207,5 +254,16 @@ class SaberReader:
             with zipfile.ZipFile(path) as zf:
                 name = next(n for n in zf.namelist()
                             if n.endswith((".sbn2", ".sbn")))
-                return read_sbn2(zf.read(name), title=path.stem)
-        return read_sbn2(path.read_bytes(), title=path.stem)
+                def load_asset(index: int) -> bytes:
+                    try:
+                        return zf.read(f"{name}.{index}")
+                    except KeyError as exc:
+                        raise ValueError(f"missing Saber image asset {index}") from exc
+                return read_sbn2(zf.read(name), title=path.stem, load_asset=load_asset)
+
+        def load_asset(index: int) -> bytes:
+            try:
+                return path.with_name(f"{path.name}.{index}").read_bytes()
+            except FileNotFoundError as exc:
+                raise ValueError(f"missing Saber image asset {index}") from exc
+        return read_sbn2(path.read_bytes(), title=path.stem, load_asset=load_asset)

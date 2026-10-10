@@ -17,9 +17,12 @@ from __future__ import annotations
 
 import struct
 import zipfile
+from io import BytesIO
 from pathlib import Path
 from statistics import median
 from typing import Any
+
+from PIL import Image
 
 from ... import ir
 from ..base import Fidelity
@@ -164,7 +167,43 @@ def _stroke_doc(s: ir.Stroke, k: float, x0: float, y0: float,
 
 
 def document_to_sbn2(doc: ir.Document,
-                     fidelity: Fidelity = Fidelity.EXACT) -> bytes:
+                     fidelity: Fidelity = Fidelity.EXACT,
+                     *, assets: list[bytes] | None = None) -> bytes:
+    # .sba stores main.sbn2.N assets. A standalone .sbn2 embeds the same
+    # bytes in the backwards-compatible top-level `a` array for portability.
+    inline = assets is None
+    if assets is None:
+        assets = []
+    asset_indices = {data: i for i, data in enumerate(assets)}
+    next_image_id = 0
+
+    def image_record(raster: ir.RasterImage, page: ir.Page, idx: int) -> dict:
+        nonlocal next_image_id
+        data = raster.data
+        with Image.open(BytesIO(data)) as img:
+            width, height = img.size
+            ext = {"PNG": ".png", "JPEG": ".jpg", "WEBP": ".webp"}.get(img.format)
+            if ext is None:
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                data, ext = buf.getvalue(), ".png"
+        if data not in asset_indices:
+            asset_indices[data] = len(assets)
+            assets.append(data)
+        b = raster.bounds or page.bounds
+        k = unit_factor(page, SABER_SCALE)
+        record = {
+            "id": next_image_id, "a": asset_indices[data], "e": ext,
+            "i": idx, "v": False, "f": 1,
+            "x": (b.x_min - page.bounds.x_min) * k,
+            "y": (b.y_min - page.bounds.y_min) * k,
+            "w": b.width * k, "h": b.height * k,
+            "sw": float(width), "sh": float(height),
+            "nw": float(width), "nh": float(height),
+        }
+        next_image_id += 1
+        return record
+
     pages = []
     for idx, page in enumerate(doc.pages):
         k = unit_factor(page, SABER_SCALE)
@@ -185,11 +224,20 @@ def document_to_sbn2(doc: ir.Document,
             page_doc["s"] = strokes
         if quill:
             page_doc["q"] = quill
+        raster_images = [image_record(layer.raster, page, idx)
+                         for layer in page.layers if layer.visible and layer.raster is not None]
+        if raster_images:
+            page_doc["i"] = raster_images
+        if isinstance(page.background, ir.ImageBackground):
+            page_doc["b"] = image_record(page.background.image, page, idx)
         pages.append(page_doc)
-    return encode_bson({
-        "v": 19, "ni": 0, "b": None, "p": "", "l": 40, "lt": 3,
+    result = {
+        "v": 19, "ni": next_image_id, "b": None, "p": "", "l": 40, "lt": 3,
         "z": pages, "c": 0,
-    })
+    }
+    if inline and assets:
+        result["a"] = assets
+    return encode_bson(result)
 
 
 class SaberWriter:
@@ -199,9 +247,12 @@ class SaberWriter:
 
     def write(self, doc: ir.Document, path: Path, fidelity: Fidelity,
               options: dict[str, Any] | None = None) -> None:
-        data = document_to_sbn2(doc, fidelity)
         if path.suffix.lower() == ".sba":
+            assets: list[bytes] = []
+            data = document_to_sbn2(doc, fidelity, assets=assets)
             with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr("main.sbn2", data)
+                for i, asset in enumerate(assets):
+                    zf.writestr(f"main.sbn2.{i}", asset)
         else:
-            path.write_bytes(data)
+            path.write_bytes(document_to_sbn2(doc, fidelity))

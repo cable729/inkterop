@@ -15,9 +15,10 @@ a public 2026 sample; layout first documented by jvns 2018):
                           strokes is [unknown], so widths stay per-stroke
                           constant and the blob is preserved in extra.
 
-Page geometry: Notability is a continuous vertical scroll; bounds are
-computed from stroke extents. Coordinates appear to be points, y down
-([inferred]). See docs/formats/notability.md.
+Page geometry: the continuous canvas is split using the stored document
+width and native paper aspect ratio. Images are decoded from referenced
+archive assets. Bare sessions without layout metadata retain the old
+continuous fallback. See docs/formats/notability.md.
 """
 from __future__ import annotations
 
@@ -25,9 +26,10 @@ import logging
 import plistlib
 import struct
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from ... import ir
+from .legacy_layout import AssetLoader, geometry, images, paginate
 
 _logger = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ def strokes_from_handwriting(hw: dict, objs: list) -> list[ir.Stroke]:
     return strokes
 
 
-def read_session(data: bytes) -> ir.Document:
+def read_session(data: bytes, load_asset: AssetLoader | None = None) -> ir.Document:
     archive = plistlib.loads(data)
     if not isinstance(archive, dict) or "$objects" not in archive:
         raise ValueError("Session.plist is not an NSKeyedArchiver archive "
@@ -104,6 +106,24 @@ def read_session(data: bytes) -> ir.Document:
         if fw is not None:
             fw_blobs.append(len(_resolve(objs, fw)) // 4)
 
+    top = archive.get("$top", {})
+    root_ref = top.get("root", top.get("$0"))
+    root = _resolve(objs, root_ref)
+    if not isinstance(root, dict):
+        root = {}
+    rasters = images(objs, root, load_asset)
+    geom = geometry(objs, root)
+    if geom is not None:
+        pages = paginate(strokes, rasters, geom)
+        for page in pages:
+            page.extra["notability"] = {"fractionalwidth_counts": fw_blobs}
+        return ir.Document(
+            format_id=FORMAT_ID, pages=pages, orientation=geom[3],
+            metadata={"notability_page_width": geom[0],
+                      "notability_page_height": geom[1],
+                      "notability_image_objects": len(rasters)},
+        )
+
     xs = [x for s in strokes for x in s.x]
     ys = [y for s in strokes for y in s.y]
     bounds = ir.Rect(
@@ -115,7 +135,7 @@ def read_session(data: bytes) -> ir.Document:
     page = ir.Page(
         bounds=bounds,
         point_scale=1.0,
-        layers=[ir.Layer(strokes=strokes)],
+        layers=[*rasters, ir.Layer(strokes=strokes)],
         extra={"notability": {"fractionalwidth_counts": fw_blobs}},
     )
     return ir.Document(format_id=FORMAT_ID, pages=[page])
@@ -139,6 +159,18 @@ class NotabilityReader:
         with zipfile.ZipFile(path) as zf:
             session = next(n for n in zf.namelist()
                            if n.endswith("Session.plist"))
-            doc = read_session(zf.read(session))
+            prefix = str(PurePosixPath(session).parent)
+
+            def load_asset(name: str) -> bytes:
+                rel = PurePosixPath(name)
+                if rel.is_absolute() or ".." in rel.parts or "\\" in name:
+                    raise ValueError(f"unsafe Notability asset path: {name!r}")
+                member = str(PurePosixPath(prefix) / rel)
+                try:
+                    return zf.read(member)
+                except KeyError as exc:
+                    raise ValueError(f"missing Notability image: {name}") from exc
+
+            doc = read_session(zf.read(session), load_asset=load_asset)
         doc.title = path.stem
         return doc

@@ -105,6 +105,173 @@ def test_detect_zip_shapes(tmp_path):
     assert not reader.detect(rm)
 
 
+def native_session(curves=CURVES, *, media=None, layout=None, paper="letter",
+                   orientation="portrait", width=567.0):
+    archive = plistlib.loads(synthetic_session(curves))
+    objs = archive["$objects"]
+    objs.append({
+        "richText": {
+            "reflowState": {"pageWidthInDocumentCoordsKey": width},
+            "mediaObjects": {"NS.objects": media or []},
+        },
+        "NBNoteTakingSessionDocumentPaperLayoutModelKey": {
+            "documentPaperAttributes": {"paperSize": paper, "paperOrientation": orientation},
+            "pageLayoutArray": {"NS.objects": layout or []},
+        },
+    })
+    archive["$top"] = {"root": plistlib.UID(len(objs) - 1)}
+    return plistlib.dumps(archive, fmt=plistlib.FMT_BINARY)
+
+
+def image_object(origin="{10, 100}", size="{40, 20}", path="Images/picture.png",
+                 crop="{{0, 0}, {4, 2}}", **kwargs):
+    return {"documentOrigin": origin, "unscaledContentSize": size,
+            "figure": {"FigureCropRectKey": crop,
+                       "FigureBackgroundObjectKey": {
+                           "kImageObjectSnapshotKey": {"relativePath": path}}},
+            **kwargs}
+
+
+def tiny_png():
+    from PIL import Image
+    from io import BytesIO
+    image = Image.new("RGB", (4, 2), "red")
+    image.putpixel((3, 0), (0, 0, 255))
+    stream = BytesIO()
+    image.save(stream, "PNG")
+    return stream.getvalue()
+
+
+def test_native_pages_use_paper_geometry_not_ink_bounds():
+    height = 744.1875
+    curves = [([10, 20], [20, 25], 2, (255, 0, 0, 255)),
+              ([30, 35], [height + 50, height + 60], 3, (0, 0, 255, 255))]
+    doc = read_session(native_session(curves))
+    assert len(doc.pages) == 2
+    assert [p.bounds.height for p in doc.pages] == [height, height]
+    assert [p.bounds.width for p in doc.pages] == [567, 567]
+    assert list(doc.pages[1].strokes())[0].y == [height + 50, height + 60]
+    # The stored layout can be shorter than the content, or include trailing blanks.
+    doc = read_session(native_session(curves, layout=[{"kPageLayoutDocumentPageNumberKey": 4}]))
+    assert len(doc.pages) == 4
+    assert not list(doc.pages[3].strokes())
+    doc = read_session(native_session(curves, layout=[{"kPageLayoutDocumentPageNumberKey": 1}]))
+    assert len(doc.pages) == 2
+
+
+@pytest.mark.parametrize("paper,orientation,w,h", [
+    ("letter", "portrait", 612, 803.25),
+    ("letter", "landscape", 803.25, 612),
+    ("a4", "portrait", 595.28, 841.89),
+])
+def test_native_paper_dimensions(paper, orientation, w, h):
+    doc = read_session(native_session(paper=paper, orientation=orientation, width=w))
+    assert doc.pages[0].bounds.height == pytest.approx(h)
+    assert doc.orientation == orientation
+
+
+def test_cross_page_stroke_is_split_with_interpolated_channels():
+    height = 744.1875
+    curves = [([10, 30], [height - 10, height + 10], 2.5, (255, 0, 0, 107))]
+    doc = read_session(native_session(curves))
+    doc.validate()
+    a, b = [list(p.strokes())[0] for p in doc.pages]
+    assert a.x == [10, 20] and b.x == [20, 30]
+    assert a.y == [height - 10, height] and b.y == [height, height + 10]
+    assert a.channels[ir.Channel.WIDTH] == b.channels[ir.Channel.WIDTH] == [2.5, 2.5]
+    assert a.appearance.opacity == b.appearance.opacity == 107 / 255
+    # Touching a boundary doesn't make an extra blank page; dots on it do.
+    doc = read_session(native_session([([10, 20], [20, height], 2, (0, 0, 0, 255))]))
+    assert len(doc.pages) == 1
+    doc = read_session(native_session([([10], [height], 2, (0, 0, 0, 255))]))
+    assert len(doc.pages) == 2
+    assert len(list(doc.pages[1].strokes())[0]) == 1
+
+
+def test_stroke_crosses_multiple_pages_and_returns():
+    doc = read_session(native_session([([10, 30, 50], [10, 2300, 20], 2, (0, 0, 0, 255))]))
+    doc.validate()
+    assert len(doc.pages) == 4
+    assert [len(list(p.strokes())) for p in doc.pages] == [2, 2, 2, 1]
+    for page in doc.pages:
+        for stroke in page.strokes():
+            assert min(stroke.y) >= page.bounds.y_min - 1e-9
+            assert max(stroke.y) <= page.bounds.y_max + 1e-9
+
+
+def test_image_asset_geometry_and_crop_flip():
+    from PIL import Image
+    from io import BytesIO
+    data = tiny_png()
+    doc = read_session(native_session(media=[image_object()]), lambda _: data)
+    raster = doc.pages[0].layers[0].raster
+    assert raster.data == data  # intact PNG/JPEGs stay byte-identical
+    assert raster.bounds == ir.Rect(10, 100, 50, 120)
+    obj = image_object(crop="{{2, 0}, {2, 2}}", isFlippedHorizontal=True)
+    doc = read_session(native_session(media=[obj]), lambda _: data)
+    img = Image.open(BytesIO(doc.pages[0].layers[0].raster.data))
+    assert img.size == (2, 2) and img.getpixel((0, 0)) == (0, 0, 255)
+
+
+def test_image_crossing_page_and_image_only_note():
+    doc = read_session(native_session([], media=[image_object(
+        origin="{10, 740}", size="{40, 20}")]), lambda _: tiny_png())
+    assert len(doc.pages) == 2
+    rasters = [next(l.raster for l in p.layers if l.raster) for p in doc.pages]
+    assert rasters[0].bounds == ir.Rect(10, 740, 50, 744.1875)
+    assert rasters[1].bounds == ir.Rect(10, 744.1875, 50, 760)
+    assert sum(r.bounds.height for r in rasters) == 20
+
+
+def test_rotated_image_keeps_display_center():
+    from PIL import Image
+    from io import BytesIO
+    obj = image_object(rotationDegrees=90)
+    doc = read_session(native_session([], media=[obj]), lambda _: tiny_png())
+    image = doc.pages[0].layers[0].raster
+    assert image.bounds == ir.Rect(20, 90, 40, 130)
+    assert Image.open(BytesIO(image.data)).size == (2, 4)
+
+
+def test_pdf_backed_layout_is_not_misread_as_native_pages():
+    data = native_session(layout=[{"kPageLayoutPDFFileNameKey": "source.pdf"}])
+    with pytest.raises(ValueError, match="PDF-backed"):
+        read_session(data)
+
+
+def test_complete_archive_reads_only_referenced_images(tmp_path):
+    note = tmp_path / "example.note"
+    with zipfile.ZipFile(note, "w") as z:
+        z.writestr("Example/Session.plist", native_session(media=[image_object()]))
+        z.writestr("Example/Images/picture.png", tiny_png())
+        z.writestr("Example/Images/deleted.png", b"unused stale asset")
+    doc = NotabilityReader().read(note)
+    assert sum(l.raster is not None for p in doc.pages for l in p.layers) == 1
+
+
+@pytest.mark.parametrize("path,match", [("../outside.png", "unsafe"),
+                                        ("Images/missing.png", "missing")])
+def test_missing_or_unsafe_image_is_not_silently_dropped(tmp_path, path, match):
+    note = tmp_path / "bad.note"
+    with zipfile.ZipFile(note, "w") as z:
+        z.writestr("Example/Session.plist", native_session(media=[image_object(path=path)]))
+    with pytest.raises(ValueError, match=match):
+        NotabilityReader().read(note)
+
+
+def test_numbered_keyed_archive_containers():
+    from inkterop.formats.notability.legacy_layout import resolve
+    objects = [None, {"NS.key.0": "a", "NS.object.0": plistlib.UID(2)},
+               {"NS.object.0": "first", "NS.object.1": "second"}]
+    assert resolve(objects, plistlib.UID(1)) == {"a": ["first", "second"]}
+    objects += [{"NS.bytes": b"\xff\x00", "$class": plistlib.UID(4)},
+                {"$classname": "NSData"},
+                {"NS.bytes": b"Images/a.png", "$class": plistlib.UID(6)},
+                {"$classname": "NSMutableString"}]
+    assert resolve(objects, plistlib.UID(3)) == b"\xff\x00"
+    assert resolve(objects, plistlib.UID(5)) == "Images/a.png"
+
+
 # --- modern .ntb (FlatBuffers noteBundle) -----------------------------------
 #
 # scribbles.ntb is self-generated (CC0): Mac app 16.5.3, one fountain-pen
